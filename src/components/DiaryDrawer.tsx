@@ -25,6 +25,8 @@ import {
   Quote,
   Highlighter,
   Type,
+  Palette,
+  Maximize2,
 } from 'lucide-react';
 import { ThemeMode, NoteItem, VoiceNoteAttachment } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
@@ -74,6 +76,15 @@ const JOURNALING_PROMPTS = [
   'List three things you feel deeply grateful for right now.',
   'If today was a chapter in a book, what would its title be?',
   'What is something you want to let go of before you sleep?',
+];
+
+const TEXT_COLORS = [
+  { name: 'Default', colorHex: null },
+  { name: 'Soft Blue', colorHex: '#3b82f6' },
+  { name: 'Emerald', colorHex: '#10b981' },
+  { name: 'Warm Amber', colorHex: '#f59e0b' },
+  { name: 'Rose Red', colorHex: '#f43f5e' },
+  { name: 'Purple', colorHex: '#a855f7' },
 ];
 
 function createSampleAudioBlob(): Blob {
@@ -192,7 +203,16 @@ export function DiaryDrawer({
   const editorRef = useRef<HTMLDivElement>(null);
   const calendarPopoverRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
+  const moreFormattingRef = useRef<HTMLDivElement>(null);
+  const moodPickerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<any>(null);
+
+  // Floating toolbar & popover states
+  const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
+  const [selectedTextColor, setSelectedTextColor] = useState<string | null>(null);
+  const [isMoreFormattingOpen, setIsMoreFormattingOpen] = useState(false);
+  const [isMoodPickerOpen, setIsMoodPickerOpen] = useState(false);
 
   // Sync state when incoming note changes
   useEffect(() => {
@@ -284,6 +304,15 @@ export function DiaryDrawer({
       }
       if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
         setIsMoreMenuOpen(false);
+      }
+      if (colorPickerRef.current && !colorPickerRef.current.contains(target)) {
+        setIsColorPickerOpen(false);
+      }
+      if (moreFormattingRef.current && !moreFormattingRef.current.contains(target)) {
+        setIsMoreFormattingOpen(false);
+      }
+      if (moodPickerRef.current && !moodPickerRef.current.contains(target)) {
+        setIsMoodPickerOpen(false);
       }
     };
     document.addEventListener('mousedown', handleOutside);
@@ -635,6 +664,24 @@ export function DiaryDrawer({
     }
   };
 
+  // Apply text color (matches the 'A' color tool in reference image)
+  const handleApplyTextColor = (colorHex: string | null) => {
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      if (!colorHex) {
+        document.execCommand('removeFormat', false);
+      } else {
+        document.execCommand('styleWithCSS', false, 'true');
+        document.execCommand('foreColor', false, colorHex);
+      }
+      handleEditorInput();
+    }
+    setIsColorPickerOpen(false);
+  };
+
   // Handle input in contentEditable editor
   const handleEditorInput = () => {
     if (editorRef.current) {
@@ -848,8 +895,8 @@ export function DiaryDrawer({
     let finalContent = editorRef.current ? editorRef.current.innerHTML : content;
     if (finalContent) {
       finalContent = finalContent
-        .replace(/ style="[^"]*"/gi, '')
-        .replace(/<span\s*>([\s\S]*?)<\/span>/gi, '$1');
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/ style="(?!color:[^"]*)[^"]*"/gi, '');
     }
     const updated: NoteItem = {
       ...note,
@@ -1036,8 +1083,8 @@ export function DiaryDrawer({
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
                 : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
-            className={`relative w-full max-w-lg md:max-w-2xl mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-5 pb-4 px-5 md:px-7 shadow-2xl flex flex-col h-[94vh] md:h-[88vh] overflow-hidden transition-colors ${
-              isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
+            className={`relative w-full max-w-lg md:max-w-2xl mx-auto rounded-t-[32px] md:rounded-[36px] pt-3 md:pt-6 pb-3 px-5 md:px-8 shadow-2xl flex flex-col h-[94vh] md:h-[90vh] overflow-hidden transition-colors border border-neutral-200/70 dark:border-white/[0.08] ${
+              isDark ? 'bg-[#121215] text-white shadow-black/70' : 'bg-[#ffffff] text-neutral-900 shadow-xl'
             }`}
           >
             {/* Top Drag Handle for mobile */}
@@ -1059,11 +1106,11 @@ export function DiaryDrawer({
               className="hidden"
             />
 
-            {/* Header: Clean, borderless, matching default app theme (NO SPLIT LINES) */}
-            <div className="flex items-center justify-between py-1.5 shrink-0 relative z-30">
-              {/* Top Left: Single-line Elegant Date Button */}
-              <div className="flex items-center gap-2 min-w-0">
-                {/* Date in format "7 Sept 2026" / "4 Sept 2001", clean single line badge, clicking opens calendar */}
+            {/* Header: Clean, borderless, editorial aesthetic (matching reference image) */}
+            <div className="flex items-center justify-between pt-1 pb-2 shrink-0 relative z-30">
+              {/* Top Left: Editorial Date Header (Day number + Stacked Weekday/YearMonth) + Mood */}
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                {/* Editorial Date Block: Day Number (e.g. 28) + Weekday / Year.Month (e.g. Fri / 2026.8) */}
                 <div className="relative shrink-0" ref={calendarPopoverRef}>
                   <button
                     type="button"
@@ -1071,23 +1118,27 @@ export function DiaryDrawer({
                       triggerHaptic('selection');
                       setIsCalendarOpen((prev) => !prev);
                     }}
-                    className={`h-8 sm:h-9 px-3 rounded-full inline-flex items-center gap-2 text-xs sm:text-sm font-medium tracking-tight whitespace-nowrap transition-all active:scale-95 cursor-pointer select-none shrink-0 ${
-                      isDark
-                        ? 'bg-[#1e1e22] hover:bg-[#28282e] text-neutral-200'
-                        : 'bg-neutral-100 hover:bg-neutral-200/80 text-neutral-800'
-                    }`}
+                    className="group flex items-center gap-2.5 px-2.5 py-1.5 -ml-2 rounded-2xl hover:bg-neutral-100 dark:hover:bg-white/5 transition-all text-left cursor-pointer active:scale-98 select-none"
                     title="Change date"
                   >
-                    <Calendar className="w-3.5 h-3.5 opacity-60 shrink-0" />
-                    <span className="whitespace-nowrap font-medium text-inherit">{headerDateString}</span>
-                    {currentMood && (
-                      <span className="text-sm select-none shrink-0" title={`Mood: ${currentMood}`}>
-                        {currentMood}
+                    {/* Big Day Number */}
+                    <span className="text-3xl sm:text-4xl font-extrabold tracking-tighter leading-none text-neutral-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors font-mono">
+                      {parsedDate.dayNum}
+                    </span>
+
+                    {/* Stacked Weekday and Year.Month */}
+                    <div className="flex flex-col justify-center leading-tight">
+                      <span className="text-[11px] sm:text-xs font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">
+                        {parsedDate.weekday}
                       </span>
-                    )}
+                      <span className="text-[11px] sm:text-xs font-medium text-neutral-400 dark:text-neutral-500 font-mono">
+                        {parsedDate.yearMonth}
+                      </span>
+                    </div>
+
                     <ChevronDown
-                      className={`w-3.5 h-3.5 opacity-60 transition-transform duration-200 shrink-0 ${
-                        isCalendarOpen ? 'rotate-180' : ''
+                      className={`w-3.5 h-3.5 text-neutral-400 opacity-60 group-hover:opacity-100 transition-transform duration-200 shrink-0 ${
+                        isCalendarOpen ? 'rotate-180 text-purple-500' : ''
                       }`}
                     />
                   </button>
@@ -1216,10 +1267,119 @@ export function DiaryDrawer({
                     )}
                   </AnimatePresence>
                 </div>
+
+                {/* Mood Tag/Picker Pill right by the date */}
+                <div className="relative shrink-0" ref={moodPickerRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setIsMoodPickerOpen((prev) => !prev);
+                    }}
+                    className={`h-8 px-2.5 sm:px-3 rounded-full inline-flex items-center gap-1.5 text-xs font-medium transition-all active:scale-95 cursor-pointer ${
+                      currentMood
+                        ? isDark
+                          ? 'bg-purple-500/15 border border-purple-500/30 text-purple-300 hover:bg-purple-500/25 shadow-2xs'
+                          : 'bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 shadow-2xs'
+                        : isDark
+                        ? 'bg-neutral-800/70 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700/50'
+                        : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 border border-neutral-200/80'
+                    }`}
+                    title="Change entry mood"
+                  >
+                    {currentMood ? (
+                      <>
+                        <span className="text-sm select-none">{currentMood}</span>
+                        <span className="hidden sm:inline-block font-medium">
+                          {MOOD_OPTIONS.find((m) => m.emoji === currentMood)?.label || 'Mood'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Smile className="w-3.5 h-3.5 opacity-70" />
+                        <span className="hidden sm:inline-block font-medium">Mood</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Mood Picker Popover */}
+                  <AnimatePresence>
+                    {isMoodPickerOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                        className={`absolute left-0 top-full mt-2 w-64 p-3 rounded-2xl border shadow-2xl z-50 ${
+                          isDark
+                            ? 'bg-[#18181c] border-neutral-800 text-white shadow-black/80'
+                            : 'bg-white border-neutral-200 text-neutral-900 shadow-xl'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-neutral-400">Select Mood</span>
+                          {currentMood && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCurrentMood(undefined);
+                                setIsMoodPickerOpen(false);
+                              }}
+                              className="text-[11px] text-rose-400 hover:underline cursor-pointer"
+                            >
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {MOOD_OPTIONS.map((opt) => (
+                            <button
+                              key={`mood-opt-${opt.label}`}
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('selection');
+                                setCurrentMood(opt.emoji);
+                                setIsMoodPickerOpen(false);
+                              }}
+                              className={`p-2 rounded-xl text-lg flex items-center justify-center transition-all cursor-pointer ${
+                                currentMood === opt.emoji
+                                  ? isDark
+                                    ? 'bg-purple-500/30 ring-2 ring-purple-400 scale-105'
+                                    : 'bg-purple-100 ring-2 ring-purple-500 scale-105'
+                                  : isDark
+                                  ? 'hover:bg-neutral-800'
+                                  : 'hover:bg-neutral-100'
+                              }`}
+                              title={opt.label}
+                            >
+                              {opt.emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
-              {/* Right: More menu (...) with Header Extras + Dedicated Save button */}
+              {/* Right: Prompts Inspiration + More menu (...) + Dedicated Save button */}
               <div className="flex items-center gap-2 shrink-0 relative">
+                {/* Journaling Prompts Inspiration Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setIsPromptsOpen(true);
+                  }}
+                  className={`h-8 sm:h-9 px-3 rounded-full flex items-center gap-1.5 text-xs font-medium transition-all active:scale-95 cursor-pointer ${
+                    isDark
+                      ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20'
+                      : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80'
+                  }`}
+                  title="Writing prompts & inspiration"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline font-medium">Prompts</span>
+                </button>
                 {/* More Menu (...) containing Header Extras */}
                 <div ref={moreMenuRef}>
                   <button
@@ -1500,48 +1660,70 @@ export function DiaryDrawer({
                 )}
               </div>
 
-              {/* Attached Photos Strip (if any) */}
+              {/* Attached Photos (with gorgeous rounded corners matching Image 2 reference) */}
               {images.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
-                    {images.map((imgSrc, idx) => (
-                      <div
-                        key={`attached-img-${idx}`}
-                        className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl overflow-hidden group shadow-xs cursor-pointer bg-neutral-900"
-                        onClick={() => setLightboxSrc(imgSrc)}
-                      >
-                        <img
-                          src={imgSrc}
-                          alt={`Attachment ${idx + 1}`}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                        />
+                <div className="my-2 space-y-2">
+                  {images.length === 1 ? (
+                    <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-200/80 dark:border-white/10 shadow-sm sm:shadow-md group bg-neutral-900/5 dark:bg-neutral-900/50">
+                      <img
+                        src={images[0]}
+                        alt="Diary visual memory"
+                        onClick={() => setLightboxSrc(images[0])}
+                        className="w-full max-h-[360px] sm:max-h-[440px] object-cover cursor-pointer transition-transform duration-500 group-hover:scale-[1.01]"
+                        loading="lazy"
+                      />
+                      {/* Floating actions on photo */}
+                      <div className="absolute top-3 right-3 flex items-center gap-2 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={() => setLightboxSrc(images[0])}
+                          className="w-8 h-8 rounded-full bg-black/65 hover:bg-black/85 text-white backdrop-blur-md flex items-center justify-center transition-all cursor-pointer shadow-md"
+                          title="View full size"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleRemovePhoto(idx);
+                            handleRemovePhoto(0);
                           }}
-                          className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/75 hover:bg-red-500 text-white flex items-center justify-center transition-colors cursor-pointer"
+                          className="w-8 h-8 rounded-full bg-black/65 hover:bg-rose-600 text-white backdrop-blur-md flex items-center justify-center transition-all cursor-pointer shadow-md"
                           title="Remove photo"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
-                        isDark
-                          ? 'border-neutral-800 hover:border-purple-500/50 text-neutral-500 hover:text-purple-400'
-                          : 'border-neutral-300 hover:border-purple-500/50 text-neutral-400 hover:text-purple-600'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4 stroke-[2]" />
-                      <span className="text-[10px] font-medium">Add photo</span>
-                    </button>
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {images.map((imgSrc, idx) => (
+                        <div
+                          key={`attached-img-${idx}`}
+                          className="relative aspect-4/3 rounded-2xl sm:rounded-2xl overflow-hidden border border-neutral-200/80 dark:border-white/10 shadow-xs group bg-neutral-900/5 dark:bg-neutral-900/50"
+                        >
+                          <img
+                            src={imgSrc}
+                            alt={`Attachment ${idx + 1}`}
+                            onClick={() => setLightboxSrc(imgSrc)}
+                            className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemovePhoto(idx);
+                            }}
+                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-xs"
+                            title="Remove photo"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1667,94 +1849,254 @@ export function DiaryDrawer({
               </div>
             </div>
 
-            {/* BOTTOM FORMATTING BAR */}
-            <footer className="bg-inherit pt-2 pb-1 shrink-0 z-20">
-              <div className="w-full flex items-center justify-between text-xs text-neutral-400">
-                {/* Quick Format Tools with Active Toggle Highlight */}
-                <div className="flex items-center gap-1.5">
+            {/* BOTTOM FLOATING EDITORIAL TOOLBAR (Matching Reference Image 2: T, 🖼️, ✏️, B, A) */}
+            <footer className="pt-2 pb-2 shrink-0 z-30 relative">
+              <div className="w-full flex items-center justify-center relative">
+                {/* Floating Docked Pill Toolbar */}
+                <div className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-white/95 dark:bg-[#1c1c22]/95 backdrop-blur-lg border border-neutral-200/90 dark:border-white/10 shadow-xl shadow-black/8 dark:shadow-black/50">
+                  {/* 1. T - Typography / Heading Toggle */}
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleToggleHeading();
+                    }}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold text-sm transition-all cursor-pointer ${
+                      activeFormats.heading
+                        ? isDark
+                          ? 'bg-neutral-700 text-white ring-1 ring-neutral-600'
+                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300'
+                        : isDark
+                        ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                        : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                    }`}
+                    title="Title / Subheading (T)"
+                  >
+                    <span className="font-bold text-sm leading-none">T</span>
+                  </button>
+
+                  {/* 2. Photo / Image Upload */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                      images.length > 0
+                        ? 'text-purple-500 hover:bg-purple-500/10'
+                        : isDark
+                        ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                        : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                    }`}
+                    title="Add photo (with rounded corners)"
+                  >
+                    <ImageIcon className="w-4 h-4 stroke-[2]" />
+                  </button>
+
+                  {/* 3. Highlighter - Soft Warm Yellow Marker */}
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleToggleHighlight();
+                    }}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                      activeFormats.highlight
+                        ? 'bg-amber-300 text-amber-950 ring-2 ring-amber-400/50 shadow-xs'
+                        : isDark
+                        ? 'text-amber-400 hover:bg-amber-400/15'
+                        : 'text-amber-600 hover:bg-amber-100/70'
+                    }`}
+                    title="Highlight text"
+                  >
+                    <Highlighter className="w-4 h-4 stroke-[2.2]" />
+                  </button>
+
+                  {/* 4. B - Bold Toggle */}
                   <button
                     type="button"
                     onMouseDown={(e) => {
                       e.preventDefault();
                       handleToggleFormatting('bold');
                     }}
-                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold text-sm transition-all cursor-pointer ${
                       activeFormats.bold
                         ? isDark
-                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
-                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
+                          ? 'bg-neutral-700 text-white ring-1 ring-neutral-600'
+                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300'
                         : isDark
-                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
-                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                        ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                        : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
                     }`}
                     title="Bold (**text**)"
                   >
                     <Bold className="w-4 h-4 stroke-[2.5]" />
                   </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleToggleFormatting('italic');
-                    }}
-                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
-                      activeFormats.italic
-                        ? isDark
-                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
-                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
-                        : isDark
-                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
-                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-                    }`}
-                    title="Italic (*text*)"
-                  >
-                    <Italic className="w-4 h-4 stroke-[2.5]" />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleToggleFormatting('list');
-                    }}
-                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
-                      activeFormats.list
-                        ? isDark
-                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
-                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
-                        : isDark
-                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
-                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-                    }`}
-                    title="Bullet List (- item)"
-                  >
-                    <List className="w-4 h-4 stroke-[2.5]" />
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      handleToggleFormatting('quote');
-                    }}
-                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
-                      activeFormats.quote
-                        ? isDark
-                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
-                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
-                        : isDark
-                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
-                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
-                    }`}
-                    title="Quote (> quote)"
-                  >
-                    <Quote className="w-4 h-4 stroke-[2.5]" />
-                  </button>
+
+                  {/* 5. A - Color Selector Popover */}
+                  <div className="relative" ref={colorPickerRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsColorPickerOpen((prev) => !prev)}
+                      className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex flex-col items-center justify-center transition-all cursor-pointer ${
+                        isColorPickerOpen
+                          ? isDark
+                            ? 'bg-neutral-700 text-white'
+                            : 'bg-neutral-200 text-neutral-900'
+                          : isDark
+                          ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                          : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                      }`}
+                      title="Text color (A)"
+                    >
+                      <span className="font-extrabold text-sm leading-none">A</span>
+                      <span
+                        className="w-3.5 h-0.5 rounded-full mt-0.5"
+                        style={{ backgroundColor: selectedTextColor || '#3b82f6' }}
+                      />
+                    </button>
+
+                    {/* Color Swatches Popover */}
+                    <AnimatePresence>
+                      {isColorPickerOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                          className={`absolute bottom-full mb-3 left-1/2 -translate-x-1/2 p-2 rounded-2xl border shadow-2xl flex items-center gap-1.5 z-50 ${
+                            isDark
+                              ? 'bg-[#1a1a1f] border-neutral-800 text-white shadow-black/80'
+                              : 'bg-white border-neutral-200 text-neutral-900 shadow-xl'
+                          }`}
+                        >
+                          {TEXT_COLORS.map((c) => (
+                            <button
+                              key={c.name}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setSelectedTextColor(c.colorHex);
+                                handleApplyTextColor(c.colorHex);
+                              }}
+                              className={`w-6 h-6 rounded-full flex items-center justify-center transition-transform hover:scale-115 cursor-pointer ${
+                                c.colorHex === null ? 'border border-neutral-400' : 'shadow-xs'
+                              }`}
+                              style={{ backgroundColor: c.colorHex || 'transparent' }}
+                              title={c.name}
+                            >
+                              {c.colorHex === null && (
+                                <span className="text-[10px] font-bold text-neutral-500">✕</span>
+                              )}
+                            </button>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Divider */}
+                  <div className={`w-px h-5 mx-0.5 ${isDark ? 'bg-neutral-800' : 'bg-neutral-200'}`} />
+
+                  {/* More Formatting Tools (Italic, List, Quote, Voice Memo) */}
+                  <div className="relative" ref={moreFormattingRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsMoreFormattingOpen((prev) => !prev)}
+                      className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                        isMoreFormattingOpen
+                          ? isDark
+                            ? 'bg-neutral-700 text-white'
+                            : 'bg-neutral-200 text-neutral-900'
+                          : isDark
+                          ? 'text-neutral-400 hover:text-white hover:bg-neutral-800'
+                          : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                      }`}
+                      title="More formatting tools"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+
+                    <AnimatePresence>
+                      {isMoreFormattingOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                          className={`absolute bottom-full mb-3 right-0 p-1.5 rounded-2xl border shadow-2xl flex items-center gap-1 z-50 ${
+                            isDark
+                              ? 'bg-[#1a1a1f] border-neutral-800 text-white shadow-black/80'
+                              : 'bg-white border-neutral-200 text-neutral-900 shadow-xl'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleToggleFormatting('italic');
+                            }}
+                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                              activeFormats.italic
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : isDark
+                                ? 'hover:bg-neutral-800 text-neutral-300'
+                                : 'hover:bg-neutral-100 text-neutral-700'
+                            }`}
+                            title="Italic (*text*)"
+                          >
+                            <Italic className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleToggleFormatting('list');
+                            }}
+                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                              activeFormats.list
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : isDark
+                                ? 'hover:bg-neutral-800 text-neutral-300'
+                                : 'hover:bg-neutral-100 text-neutral-700'
+                            }`}
+                            title="Bullet List (- item)"
+                          >
+                            <List className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              handleToggleFormatting('quote');
+                            }}
+                            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+                              activeFormats.quote
+                                ? 'bg-purple-500/20 text-purple-400'
+                                : isDark
+                                ? 'hover:bg-neutral-800 text-neutral-300'
+                                : 'hover:bg-neutral-100 text-neutral-700'
+                            }`}
+                            title="Quote (> quote)"
+                          >
+                            <Quote className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleToggleRecord();
+                              setIsMoreFormattingOpen(false);
+                            }}
+                            className="p-2 rounded-xl text-purple-400 hover:bg-purple-500/15 transition-colors cursor-pointer"
+                            title="Record Voice Note"
+                          >
+                            <Mic className="w-4 h-4" />
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
-                {/* Right side: Clean Word count */}
-                <div className="flex items-center gap-2 text-[11px] text-neutral-400 font-medium">
-                  {wordCount > 0 && (
-                    <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
-                  )}
+                {/* Word Count (Minimalist, placed at bottom right matching Image 2) */}
+                <div className="absolute right-3 sm:right-5 text-xs font-medium text-neutral-400 select-none">
+                  {wordCount > 0 ? `${wordCount} ${wordCount === 1 ? 'word' : 'words'}` : ''}
                 </div>
               </div>
             </footer>

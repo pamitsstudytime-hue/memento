@@ -797,7 +797,7 @@ function NoteCard({
           {/* Attached Photo Previews (Adaptive Grid) */}
           {allImages.length === 1 && (
             <div
-              className={`mt-2.5 overflow-hidden rounded-xl border flex items-center justify-center ${
+              className={`mt-2.5 overflow-hidden rounded-2xl border flex items-center justify-center ${
                 isDark
                   ? 'border-neutral-800/80 bg-[#181818]'
                   : 'border-neutral-200/40 bg-neutral-50/50'
@@ -806,7 +806,7 @@ function NoteCard({
               <img
                 src={allImages[0]}
                 alt={note.title || 'Attached photo'}
-                className="w-full max-h-72 sm:max-h-80 object-contain rounded-xl pointer-events-none select-none"
+                className="w-full max-h-72 sm:max-h-80 object-contain rounded-2xl pointer-events-none select-none"
                 draggable={false}
                 loading="lazy"
               />
@@ -814,11 +814,11 @@ function NoteCard({
           )}
 
           {allImages.length === 2 && (
-            <div className="mt-2.5 grid grid-cols-2 gap-1.5 overflow-hidden rounded-xl">
+            <div className="mt-2.5 grid grid-cols-2 gap-2 overflow-hidden rounded-2xl">
               {allImages.map((src, i) => (
                 <div
                   key={`pair-img-${note.id}-${i}`}
-                  className={`aspect-square rounded-xl overflow-hidden border ${
+                  className={`aspect-square rounded-2xl overflow-hidden border ${
                     isDark
                       ? 'bg-[#181818] border-neutral-800/80'
                       : 'bg-neutral-50/50 border-neutral-200/40'
@@ -837,11 +837,11 @@ function NoteCard({
           )}
 
           {allImages.length >= 3 && (
-            <div className="mt-2.5 grid grid-cols-3 gap-1.5 overflow-hidden rounded-xl">
+            <div className="mt-2.5 grid grid-cols-3 gap-2 overflow-hidden rounded-2xl">
               {allImages.slice(0, 3).map((src, i) => (
                 <div
                   key={`grid-img-${note.id}-${i}`}
-                  className={`relative aspect-square rounded-xl overflow-hidden border ${
+                  className={`relative aspect-square rounded-2xl overflow-hidden border ${
                     isDark
                       ? 'bg-[#181818] border-neutral-800/80'
                       : 'bg-neutral-50/50 border-neutral-200/40'
