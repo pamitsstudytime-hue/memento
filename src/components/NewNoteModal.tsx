@@ -376,7 +376,7 @@ const sanitizeEntryType = (t: unknown): EntryType => {
 export function NewNoteModal({
   isOpen,
   theme,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   initialType = 'notes',
   editingNote,
   existingNotes = [],
@@ -385,6 +385,10 @@ export function NewNoteModal({
   onUpdateNote,
 }: NewNoteModalProps) {
   const isDark = theme === 'dark';
+
+  // Controls whether the drawer opens low (compact) or expanded tall
+  const [isExpanded, setIsExpanded] = useState(false);
+  const dragStartYRef = useRef<number | null>(null);
 
   // Entry type state (notes, diary, passwords, todo)
   const [entryType, setEntryType] = useState<EntryType>(() => sanitizeEntryType(initialType));
@@ -824,6 +828,25 @@ export function NewNoteModal({
       }
     }
   }, [isOpen, editingNote, initialType, autoOpenKeyboard]);
+
+  // Always reset drawer to low compact mode when opened
+  useEffect(() => {
+    if (isOpen) {
+      setIsExpanded(false);
+    }
+  }, [isOpen]);
+
+  // Dynamically auto-grow content textarea as user writes notes, allowing drawer to increase its length
+  useEffect(() => {
+    if (contentTextareaRef.current) {
+      contentTextareaRef.current.style.height = 'auto';
+      const targetHeight = Math.min(
+        Math.max(contentTextareaRef.current.scrollHeight, 68),
+        isExpanded ? 360 : 180
+      );
+      contentTextareaRef.current.style.height = `${targetHeight}px`;
+    }
+  }, [content, isExpanded, entryType, isOpen]);
 
   // Existing notes matching currently typed title or recent items for suggestion
   const matchingExistingNotes = useMemo(() => {
@@ -1717,15 +1740,54 @@ export function NewNoteModal({
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
                 : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
-            className={`relative w-full max-w-md md:max-w-xl mx-auto rounded-t-[28px] md:rounded-[28px] pt-2.5 md:pt-5 pb-5 px-5 md:px-7 shadow-2xl flex flex-col min-h-[440px] md:min-h-[460px] max-h-[92vh] md:max-h-[85vh] overflow-hidden transition-colors ${
+            className={`relative w-full max-w-md md:max-w-xl mx-auto rounded-t-[28px] md:rounded-[28px] pt-2 md:pt-5 pb-5 px-5 md:px-7 shadow-2xl flex flex-col ${
+              isExpanded
+                ? 'h-[86vh] md:h-auto md:max-h-[85vh]'
+                : 'h-auto max-h-[88vh] md:max-h-[85vh]'
+            } overflow-hidden transition-[height,max-height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
             }`}
           >
-            {/* Top subtle drag pill (mobile only) */}
-            <div className="flex justify-center pb-2 md:hidden">
+            {/* Top subtle drag pill (mobile only) - tap or drag up to expand length, drag down to collapse */}
+            <div
+              className="flex justify-center pb-2 pt-1 md:hidden cursor-pointer touch-none select-none group -mt-1"
+              onClick={() => {
+                triggerHaptic('light');
+                setIsExpanded((prev) => !prev);
+              }}
+              onTouchStart={(e) => {
+                dragStartYRef.current = e.touches[0].clientY;
+              }}
+              onTouchEnd={(e) => {
+                if (dragStartYRef.current === null) return;
+                const deltaY = e.changedTouches[0].clientY - dragStartYRef.current;
+                dragStartYRef.current = null;
+                if (deltaY < -30) {
+                  // Dragged upwards -> increase length
+                  triggerHaptic('light');
+                  setIsExpanded(true);
+                } else if (deltaY > 40) {
+                  // Dragged downwards -> collapse if expanded, or close if already low
+                  triggerHaptic('light');
+                  if (isExpanded) {
+                    setIsExpanded(false);
+                  } else {
+                    onClose();
+                  }
+                }
+              }}
+              aria-label={isExpanded ? 'Collapse sheet' : 'Expand sheet'}
+              title={isExpanded ? 'Collapse sheet' : 'Drag or tap to expand'}
+            >
               <div
-                className={`w-9 h-1 rounded-full ${
-                  isDark ? 'bg-neutral-800' : 'bg-neutral-300'
+                className={`w-10 h-1.5 rounded-full transition-all duration-200 group-hover:scale-x-110 ${
+                  isDark
+                    ? isExpanded
+                      ? 'bg-neutral-600'
+                      : 'bg-neutral-700'
+                    : isExpanded
+                    ? 'bg-neutral-400'
+                    : 'bg-neutral-300'
                 }`}
               />
             </div>
@@ -1869,11 +1931,13 @@ export function NewNoteModal({
 
             {/* DYNAMIC BODY: Fluid and borderless (NO split lines anywhere) */}
             <div
-              className={`flex-1 ${
+              className={`${
+                isExpanded ? 'flex-1' : ''
+              } ${
                 isSuggestionsActive || showTodoIconPicker ? 'overflow-visible relative z-50' : 'overflow-y-auto'
               } no-scrollbar pt-1.5 ${
-                entryType === 'todo' ? 'pb-24' : 'pb-2'
-              } max-h-[55vh] md:max-h-[62vh]`}
+                entryType === 'todo' ? 'pb-4' : 'pb-2'
+              } max-h-[60vh] md:max-h-[64vh] transition-all`}
             >
               <AnimatePresence mode="wait">
                 {/* 1. DIARY FORMAT (Clean, elegant notepad) */}
@@ -1911,11 +1975,18 @@ export function NewNoteModal({
                     <textarea
                       ref={contentTextareaRef}
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
+                      onChange={(e) => {
+                        setContent(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(
+                          Math.max(e.target.scrollHeight, 68),
+                          isExpanded ? 360 : 180
+                        )}px`;
+                      }}
                       onKeyDown={handleContentKeyDown}
                       placeholder="Write your thoughts..."
-                      rows={attachedImages.length > 0 ? 2 : 4}
-                      className={`w-full bg-transparent text-sm placeholder:text-neutral-600 focus:outline-none resize-none leading-relaxed ${
+                      rows={attachedImages.length > 0 ? 2 : 3}
+                      className={`w-full bg-transparent text-sm placeholder:text-neutral-600 focus:outline-none resize-none leading-relaxed transition-[height] ${
                         isDark ? 'text-neutral-200' : 'text-neutral-700'
                       }`}
                     />
@@ -2036,9 +2107,9 @@ export function NewNoteModal({
                       {/* Active tags pills (shown if any tags exist) */}
                       {safeTags.length > 0 && (
                         <div className="flex flex-wrap items-center gap-1.5 mt-2.5 pt-2 border-t border-dashed border-neutral-700/25 dark:border-neutral-700/30">
-                          {safeTags.map((tag) => (
+                          {safeTags.map((tag, sIdx) => (
                             <span
-                              key={tag}
+                              key={`safe-tag-${tag}-${sIdx}`}
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-all ${
                                 isDark
                                   ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
@@ -2081,11 +2152,11 @@ export function NewNoteModal({
 
                               {/* Quick suggestions pills */}
                               <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                                {QUICK_SAFE_TAGS.map((tag) => {
+                                {QUICK_SAFE_TAGS.map((tag, qIdx) => {
                                   const isSelected = safeTags.includes(tag);
                                   return (
                                     <button
-                                      key={tag}
+                                      key={`quick-safe-tag-${tag}-${qIdx}`}
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -2830,11 +2901,18 @@ export function NewNoteModal({
                     <textarea
                       ref={contentTextareaRef}
                       value={content}
-                      onChange={(e) => setContent(e.target.value)}
+                      onChange={(e) => {
+                        setContent(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(
+                          Math.max(e.target.scrollHeight, 68),
+                          isExpanded ? 360 : 180
+                        )}px`;
+                      }}
                       onKeyDown={handleContentKeyDown}
                       placeholder="Write your thoughts..."
-                      rows={attachedImages.length > 0 ? 2 : 4}
-                      className={`w-full bg-transparent text-sm placeholder:text-neutral-600 focus:outline-none resize-none leading-relaxed ${
+                      rows={attachedImages.length > 0 ? 2 : 3}
+                      className={`w-full bg-transparent text-sm placeholder:text-neutral-600 focus:outline-none resize-none leading-relaxed transition-[height] ${
                         isDark ? 'text-neutral-200' : 'text-neutral-700'
                       }`}
                     />

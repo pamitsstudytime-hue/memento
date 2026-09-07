@@ -168,9 +168,8 @@ export const CHIPS: Array<{
 }> = [
   { id: 'all', label: 'All', icon: Layers },
   { id: 'note', label: 'Note', icon: Feather },
-  { id: 'safe', label: 'Safe', icon: Shield },
-  { id: 'key', label: 'Key', icon: KeyRound },
   { id: 'todo', label: 'Todo', icon: ListTodo },
+  { id: 'safe', label: 'Safe', icon: Shield },
   { id: 'diary', label: 'Diary', icon: BookOpen },
 ];
 
@@ -199,10 +198,68 @@ function reorderNotesWithFilter(
   return result;
 }
 
+export function cleanNoteTextForPreview(raw?: string): string {
+  if (!raw) return '';
+  let text = raw;
+  if (/<[a-z][\s\S]*>/i.test(text)) {
+    text = text
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<\/blockquote>/gi, '\n')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  return text;
+}
+
+function renderFormattedInlineText(text: string): React.ReactNode {
+  if (!text) return '';
+  if (!text.includes('*')) return text;
+
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      parts.push(text.substring(lastIdx, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(
+        <strong key={`bold-${match.index}`} className="font-semibold text-neutral-800 dark:text-neutral-200">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      parts.push(
+        <em key={`italic-${match.index}`} className="italic">
+          {token.slice(1, -1)}
+        </em>
+      );
+    }
+    lastIdx = regex.lastIndex;
+  }
+  if (lastIdx < text.length) {
+    parts.push(text.substring(lastIdx));
+  }
+  return parts.length > 0 ? parts : text;
+}
+
 function getCleanNonTodoContent(note: NoteItem): string {
-  if (note.entryType !== 'todo' && !note.isTodo) return note.content || '';
   if (!note.content) return '';
-  const cleaned = note.content
+  const rawClean = cleanNoteTextForPreview(note.content);
+  if (note.entryType !== 'todo' && !note.isTodo) return rawClean;
+  const cleaned = rawClean
     .replace(/\[(x|X|\s*)\]\s*[^\[\n\r]*/g, '')
     .split('\n')
     .map((l) => l.replace(/^[-*•]\s*/, '').trim())
@@ -221,7 +278,8 @@ function InteractiveNoteContent({
   isDark: boolean;
   onToggleCheckbox?: (lineIndex: number) => void;
 }) {
-  const lines = content.split('\n');
+  const displayContent = cleanNoteTextForPreview(content);
+  const lines = displayContent.split('\n');
   const hasCheckboxes = lines.some((l) => /^\s*[-*•]?\s*\[(?: |x|X)\]/.test(l));
 
   if (!hasCheckboxes) {
@@ -231,7 +289,12 @@ function InteractiveNoteContent({
           isDark ? 'text-neutral-400' : 'text-neutral-600'
         }`}
       >
-        {content}
+        {lines.map((line, lIdx) => (
+          <React.Fragment key={`l-${lIdx}`}>
+            {renderFormattedInlineText(line)}
+            {lIdx < lines.length - 1 && '\n'}
+          </React.Fragment>
+        ))}
       </p>
     );
   }
@@ -276,7 +339,7 @@ function InteractiveNoteContent({
                     : 'text-neutral-700'
                 }`}
               >
-                {taskText}
+                {renderFormattedInlineText(taskText)}
               </span>
             </div>
           );
@@ -291,7 +354,7 @@ function InteractiveNoteContent({
               isDark ? 'text-neutral-400' : 'text-neutral-600'
             }`}
           >
-            {line}
+            {renderFormattedInlineText(line)}
           </p>
         );
       })}
@@ -1249,8 +1312,9 @@ function estimateNoteHeight(note: NoteItem): number {
   }
 
   if (note.content && !isTodo) {
-    const lines = note.content.split('\n').length;
-    const approxWrapped = Math.ceil(note.content.length / 32);
+    const cleanTxt = cleanNoteTextForPreview(note.content);
+    const lines = cleanTxt.split('\n').length;
+    const approxWrapped = Math.ceil(cleanTxt.length / 32);
     const totalLines = Math.min(Math.max(lines, approxWrapped), 6);
     h += totalLines * 20 + 8;
   }
@@ -1322,9 +1386,9 @@ function estimateNoteHeight(note: NoteItem): number {
         >
           {columnNotes.map((col, colIndex) => (
             <div key={`col-${colIndex}`} className="flex flex-col gap-3 md:gap-3.5 min-w-0">
-              {col.map((note) => (
+              {col.map((note, noteIdx) => (
                 <NoteCard
-                  key={`card-${note.id}`}
+                  key={`card-${note.id || 'note'}-${noteIdx}`}
                   note={note}
                   theme={theme}
                   onSelectNote={onSelectNote}

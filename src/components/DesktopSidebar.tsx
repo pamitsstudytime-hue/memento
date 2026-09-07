@@ -23,6 +23,7 @@ interface DesktopSidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onSelectTab: (tab: NavTab) => void;
+  onOpenDiary?: () => void;
   onOpenTodo?: () => void;
   onOpenNewNote: () => void;
   onOpenSearch?: () => void;
@@ -39,6 +40,7 @@ export function DesktopSidebar({
   isCollapsed = false,
   onToggleCollapse,
   onSelectTab,
+  onOpenDiary,
   onOpenTodo,
   onOpenNewNote,
   onOpenSettings,
@@ -92,8 +94,14 @@ export function DesktopSidebar({
       id: 'diary' as NavTab,
       label: 'Diary',
       icon: BookOpen,
-      isActive: currentPage === 'main' && activeTab === 'diary',
-      onClick: () => onSelectTab('diary'),
+      isActive: currentPage === 'diary' || (currentPage === 'main' && activeTab === 'diary'),
+      onClick: () => {
+        if (onOpenDiary) {
+          onOpenDiary();
+        } else {
+          onSelectTab('diary');
+        }
+      },
     },
     {
       id: 'archive' as NavTab,
@@ -211,29 +219,13 @@ export function DesktopSidebar({
           </div>
         ) : (
           <div className="px-6 pt-6 pb-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center shadow-sm shrink-0 ${
-                  isDark
-                    ? 'bg-[#1a1a1a] text-white'
-                    : 'bg-neutral-900 text-white'
-                }`}
-              >
-                <span className="text-lg font-bold tracking-tight">m</span>
-              </div>
-              <div>
-                <h1
-                  className={`text-lg font-bold tracking-tight leading-tight ${
-                    isDark ? 'text-white' : 'text-neutral-900'
-                  }`}
-                >
-                  memento
-                </h1>
-                <p className={`text-[11px] ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>
-                  minimal notebook
-                </p>
-              </div>
-            </div>
+            <h1
+              className={`text-2xl sm:text-[26px] font-bold tracking-tight select-none ${
+                isDark ? 'text-white' : 'text-neutral-900'
+              }`}
+            >
+              memento
+            </h1>
 
             {/* Collapse Button */}
             {onToggleCollapse && (

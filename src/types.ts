@@ -11,7 +11,7 @@ export type NavTab =
   | 'archive';
 export type ThemeMode = 'dark' | 'light';
 export type EntryType = 'diary' | 'passwords' | 'todo' | 'notes';
-export type AppPage = 'main' | 'settings' | 'todo' | 'safe';
+export type AppPage = 'main' | 'settings' | 'todo' | 'safe' | 'diary';
 
 export interface StandaloneTodoItem {
   id: string;
@@ -91,6 +91,7 @@ export interface NoteItem {
   voiceNotes?: VoiceNoteAttachment[];
   imageUrl?: string;
   images?: string[];
+  mood?: string;
   documents?: DocumentAttachment[];
   personalInfo?: PersonalInfoField[];
 }

@@ -20,7 +20,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { ThemeMode, CategoryFilter, getNoteCategory } from '../types';
-import { NoteItem } from './EmptyBody';
+import { NoteItem, cleanNoteTextForPreview } from './EmptyBody';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { triggerHaptic } from '../lib/capacitor';
@@ -52,7 +52,7 @@ export function SearchDrawer({
   isOpen,
   theme,
   notes,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   defaultCategory = 'all',
   onClose,
   onSelectNote,
@@ -532,7 +532,7 @@ export function SearchDrawer({
                               isDark ? 'text-neutral-400' : 'text-neutral-600'
                             }`}
                           >
-                            {note.content}
+                            {cleanNoteTextForPreview(note.content)}
                           </p>
                         )}
                         {!isPassKey && (note.images?.[0] || note.imageUrl) && (

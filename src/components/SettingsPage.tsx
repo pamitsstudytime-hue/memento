@@ -42,7 +42,7 @@ export function SettingsPage({
   theme,
   notes,
   isNavbarFloating = false,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   onBack,
   onOpenSearch,
   onSelectNote,
@@ -646,7 +646,7 @@ export function SettingsPage({
                   <div
                     className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm shrink-0 ${
                       isDark
-                        ? 'bg-[#1e1e1e] text-white border border-neutral-800/60'
+                        ? 'bg-white text-neutral-950'
                         : 'bg-neutral-900 text-white'
                     }`}
                   >

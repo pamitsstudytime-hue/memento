@@ -18,9 +18,8 @@ export const CHIPS: Array<{
 }> = [
   { id: 'all', label: 'All', icon: Layers },
   { id: 'note', label: 'Note', icon: Feather },
-  { id: 'safe', label: 'Safe', icon: Shield },
-  { id: 'key', label: 'Key', icon: KeyRound },
   { id: 'todo', label: 'Todo', icon: ListTodo },
+  { id: 'safe', label: 'Safe', icon: Shield },
   { id: 'diary', label: 'Diary', icon: BookOpen },
 ];
 
@@ -185,9 +184,9 @@ export function TopBar({
       {showChips && (
         <div
           id="home-chips-bar"
-          className="px-5 md:px-8 pb-2.5 pt-0 overflow-x-auto no-scrollbar scroll-smooth"
+          className="w-full overflow-x-auto no-scrollbar scroll-smooth overscroll-x-contain pb-2.5 pt-0"
         >
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-5 md:px-8 py-0.5 w-max min-w-full">
             {CHIPS.map((chip) => {
               const ChipIcon = chip.icon;
               const isActive = activeChip === chip.id;

@@ -1,4 +1,4 @@
-import { Home, ListTodo, Plus, Shield, MoreHorizontal } from 'lucide-react';
+import { Home, BookOpen, Plus, Shield, MoreHorizontal } from 'lucide-react';
 import { motion } from 'motion/react';
 import { NavTab, ThemeMode, AppPage } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
@@ -10,6 +10,7 @@ interface NavBarProps {
   isSettings?: boolean;
   isNavbarFloating?: boolean;
   onSelectTab: (tab: NavTab) => void;
+  onOpenDiary?: () => void;
   onOpenTodo?: () => void;
   onOpenNewNote: () => void;
   onOpenDrawer: () => void;
@@ -22,14 +23,15 @@ export function NavBar({
   isSettings = false,
   isNavbarFloating = false,
   onSelectTab,
+  onOpenDiary,
   onOpenTodo,
   onOpenNewNote,
   onOpenDrawer,
 }: NavBarProps) {
   const isDark = theme === 'dark';
-  const isHomeActive = (activeTab === 'home' || activeTab === 'notes') && currentPage === 'main' && !isSettings;
-  const isTodoActive = currentPage === 'todo';
-  const isSafeActive = (activeTab === 'vault' || activeTab === 'safe') && currentPage === 'main' && !isSettings;
+  const isDiaryActive = !isSettings && (currentPage === 'diary' || (currentPage === 'main' && activeTab === 'diary'));
+  const isSafeActive = !isSettings && (currentPage === 'safe' || (currentPage === 'main' && (activeTab === 'vault' || activeTab === 'safe')));
+  const isHomeActive = !isSettings && currentPage === 'main' && !isDiaryActive && !isSafeActive;
 
   return (
     <nav
@@ -88,22 +90,22 @@ export function NavBar({
           />
         </button>
 
-        {/* 2. Todo button (2nd button) */}
+        {/* 2. Diary button (2nd button, replaced Todo) */}
         <button
-          id="nav-btn-todo"
+          id="nav-btn-diary"
           type="button"
           onClick={() => {
             triggerHaptic('selection');
-            if (onOpenTodo) {
-              onOpenTodo();
+            if (onOpenDiary) {
+              onOpenDiary();
             } else {
-              onSelectTab('todo');
+              onSelectTab('diary');
             }
           }}
           className="relative flex-1 py-2.5 flex flex-col items-center justify-center rounded-full transition-colors group"
-          aria-label="Todo"
+          aria-label="Diary"
         >
-          {isTodoActive && (
+          {isDiaryActive && (
             <motion.div
               layoutId="nav-pill"
               className={`absolute inset-0 rounded-full ${
@@ -112,9 +114,9 @@ export function NavBar({
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
             />
           )}
-          <ListTodo
+          <BookOpen
             className={`w-5 h-5 relative z-10 transition-colors ${
-              isTodoActive
+              isDiaryActive
                 ? isDark
                   ? 'text-white'
                   : 'text-neutral-900'
@@ -122,7 +124,7 @@ export function NavBar({
                 ? 'text-neutral-400 group-hover:text-neutral-200'
                 : 'text-neutral-500 group-hover:text-neutral-800'
             }`}
-            strokeWidth={isTodoActive ? 2.2 : 1.8}
+            strokeWidth={isDiaryActive ? 2.2 : 1.8}
           />
         </button>
 

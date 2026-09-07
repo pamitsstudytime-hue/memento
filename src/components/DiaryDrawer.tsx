@@ -1,32 +1,81 @@
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  BookOpen,
-  Feather,
-  KeyRound,
-  ListTodo,
-  X,
-  Trash2,
   Calendar,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Image as ImageIcon,
   Mic,
-  Copy,
+  Smile,
+  Sparkles,
+  Save,
   Check,
-  Pencil,
+  MoreHorizontal,
+  Bookmark,
+  Copy,
+  Trash2,
   Play,
   Pause,
-  ChevronDown,
-  ChevronUp,
-  Maximize2,
+  X,
+  Plus,
+  Bold,
+  Italic,
+  List,
+  Quote,
+  Highlighter,
+  Type,
 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
 import { ThemeMode, NoteItem, VoiceNoteAttachment } from '../types';
+import { triggerHaptic } from '../lib/capacitor';
+import { formatDiaryHeaderDate, stripHtml } from '../lib/formatters';
+import { ImageLightbox } from './ImageLightbox';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
-import { triggerHaptic } from '../lib/capacitor';
-import { ImageLightbox } from './ImageLightbox';
-import { capitalizeFirstChar } from '../lib/formatters';
-import { SubDrawerMoreMenu } from './SubDrawerMoreMenu';
 
-// Fallback audio tone generator in case note doesn't have an audio file url
+function formatInitialHtml(text: string): string {
+  if (!text) return '';
+  let converted = text
+    .replace(/==([^=]+)==/g, '<mark class="bg-amber-200/90 dark:bg-amber-400/35 px-1 py-0.5 rounded text-inherit font-medium">$1</mark>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*]+)\*([^*]|$)/g, '$1<em>$2</em>$3')
+    .replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
+    .replace(/^>\s+(.*)$/gm, '<blockquote>$1</blockquote>')
+    .replace(/^- (.*)$/gm, '<li>$1</li>');
+
+  if (/<[a-z][\s\S]*>/i.test(converted)) {
+    return converted;
+  }
+  const paragraphs = converted.split(/\n\n+/);
+  if (paragraphs.length > 1) {
+    return paragraphs.map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`).join('');
+  }
+  return converted.replace(/\n/g, '<br/>');
+}
+
+const MOOD_OPTIONS = [
+  { emoji: '✨', label: 'Grateful' },
+  { emoji: '😌', label: 'Peaceful' },
+  { emoji: '😊', label: 'Joyful' },
+  { emoji: '💡', label: 'Inspired' },
+  { emoji: '🌿', label: 'Calm' },
+  { emoji: '⚡', label: 'Energetic' },
+  { emoji: '💭', label: 'Reflective' },
+  { emoji: '🥰', label: 'Loved' },
+  { emoji: '😴', label: 'Tired' },
+  { emoji: '🌧️', label: 'Melancholy' },
+];
+
+const JOURNALING_PROMPTS = [
+  'What made you smile or feel genuinely at peace today?',
+  'What was the biggest highlight or accomplishment of your day?',
+  'Name one thing you learned about yourself or others today.',
+  'What challenge did you encounter, and how did you navigate it?',
+  'List three things you feel deeply grateful for right now.',
+  'If today was a chapter in a book, what would its title be?',
+  'What is something you want to let go of before you sleep?',
+];
+
 function createSampleAudioBlob(): Blob {
   const sampleRate = 44100;
   const duration = 2.5;
@@ -66,6 +115,13 @@ function createSampleAudioBlob(): Blob {
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
+function formatDateToISO(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 interface DiaryDrawerProps {
   isOpen: boolean;
   theme: ThemeMode;
@@ -82,7 +138,6 @@ export function DiaryDrawer({
   theme,
   note,
   onClose,
-  onEdit,
   onDelete,
   onToggleFavorite,
   onUpdateNote,
@@ -90,48 +145,797 @@ export function DiaryDrawer({
   const isDark = theme === 'dark';
   const isDesktop = useIsDesktop();
   const keyboardOffset = useKeyboardOffset();
+
+  // Form states initialized from note
+  const [title, setTitle] = useState('');
+  const [titleError, setTitleError] = useState(false);
+  const [content, setContent] = useState('');
+  const [currentDate, setCurrentDate] = useState(() => formatDateToISO(new Date()));
+  const [currentMood, setCurrentMood] = useState<string | undefined>(undefined);
+  const [images, setImages] = useState<string[]>([]);
+  const [voiceNotes, setVoiceNotes] = useState<VoiceNoteAttachment[]>([]);
+
+  // UI state
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [isPromptsOpen, setIsPromptsOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [isSavedJustNow, setIsSavedJustNow] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+
+  // Active formatting state for bold, italic, list, quote, highlight, heading
+  const [activeFormats, setActiveFormats] = useState({
+    bold: false,
+    italic: false,
+    list: false,
+    quote: false,
+    highlight: false,
+    heading: false,
+  });
+
+  // Audio state
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
   const [playbackTime, setPlaybackTime] = useState(0);
-  const [isVoiceCollapsed, setIsVoiceCollapsed] = useState(false);
-  const [isPhotosCollapsed, setIsPhotosCollapsed] = useState(false);
-  const [lightboxImg, setLightboxImg] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordDuration, setRecordDuration] = useState(0);
+  const recordIntervalRef = useRef<any>(null);
+
+  // Calendar popover navigation state
+  const [calNavDate, setCalNavDate] = useState(() => new Date());
+
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const calendarPopoverRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const saveTimeoutRef = useRef<any>(null);
+
+  // Sync state when incoming note changes
+  useEffect(() => {
+    if (note) {
+      setTitle(note.title || '');
+      setTitleError(false);
+      setIsSavedJustNow(false);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      const raw = note.content || '';
+      const formatted = formatInitialHtml(raw);
+      setContent(formatted);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = formatted;
+      }
+      const noteDate =
+        note.date && /^\d{4}-\d{2}-\d{2}$/.test(note.date)
+          ? note.date
+          : formatDateToISO(new Date(note.date || Date.now()));
+      setCurrentDate(noteDate);
+      setCurrentMood(note.mood);
+
+      const imgs =
+        note.images && note.images.length > 0
+          ? note.images
+          : note.imageUrl
+          ? [note.imageUrl]
+          : [];
+      setImages(imgs);
+
+      const vns =
+        note.voiceNotes && note.voiceNotes.length > 0
+          ? note.voiceNotes
+          : note.voiceAudioUrl || note.hasVoiceNote
+          ? [
+              {
+                id: 'vn-main',
+                audioUrl: note.voiceAudioUrl || '',
+                duration: note.voiceDuration || '0:15',
+                name: 'Voice Note',
+              },
+            ]
+          : [];
+      setVoiceNotes(vns);
+
+      // Parse date for calendar nav
+      try {
+        const [y, m] = noteDate.split('-').map(Number);
+        setCalNavDate(new Date(y, m - 1, 1));
+      } catch {
+        setCalNavDate(new Date());
+      }
+    }
+  }, [note, isOpen]);
+
+  // Ensure DOM innerHTML is synced on drawer open
+  useEffect(() => {
+    if (isOpen && note && editorRef.current) {
+      const formatted = formatInitialHtml(note.content || '');
+      if (editorRef.current.innerHTML !== formatted) {
+        editorRef.current.innerHTML = formatted;
+      }
+    }
+  }, [isOpen, note]);
+
+  // Clean up audio and timers on unmount or close
   useEffect(() => {
     return () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current = null;
       }
-      setActivePlayingId(null);
-      setPlaybackTime(0);
+      if (recordIntervalRef.current) {
+        clearInterval(recordIntervalRef.current);
+      }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
     };
-  }, [note]);
+  }, []);
 
-  if (!note) return null;
+  // Close popovers on click outside
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (calendarPopoverRef.current && !calendarPopoverRef.current.contains(target)) {
+        setIsCalendarOpen(false);
+      }
+      if (moreMenuRef.current && !moreMenuRef.current.contains(target)) {
+        setIsMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, []);
 
-  const allVoiceNotes: VoiceNoteAttachment[] =
-    note.voiceNotes && note.voiceNotes.length > 0
-      ? note.voiceNotes
-      : note.voiceAudioUrl || note.hasVoiceNote
-      ? [
-          {
-            id: 'vn-main',
-            audioUrl: note.voiceAudioUrl || '',
-            duration: note.voiceDuration || '0:15',
-            name: 'Voice Note',
-          },
-        ]
-      : [];
+  // Calendar month days calculation (Hook must be called unconditionally)
+  const calendarDays = useMemo(() => {
+    const year = calNavDate.getFullYear();
+    const month = calNavDate.getMonth();
+    const firstDay = new Date(year, month, 1).getDay();
+    // Monday as 0: (day + 6) % 7
+    const startingOffset = (firstDay + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const allImages: string[] =
-    note.images && note.images.length > 0
-      ? note.images
-      : note.imageUrl
-      ? [note.imageUrl]
-      : [];
+    const cells: { dateStr: string; dayNum: number; isCurrentMonth: boolean }[] = [];
 
+    // Prev month days
+    const prevMonthDays = new Date(year, month, 0).getDate();
+    for (let i = startingOffset - 1; i >= 0; i--) {
+      const dNum = prevMonthDays - i;
+      const prevDate = new Date(year, month - 1, dNum);
+      cells.push({
+        dateStr: formatDateToISO(prevDate),
+        dayNum: dNum,
+        isCurrentMonth: false,
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const curDate = new Date(year, month, i);
+      cells.push({
+        dateStr: formatDateToISO(curDate),
+        dayNum: i,
+        isCurrentMonth: true,
+      });
+    }
+
+    // Trailing days
+    const remaining = (7 - (cells.length % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      const nextDate = new Date(year, month + 1, i);
+      cells.push({
+        dateStr: formatDateToISO(nextDate),
+        dayNum: i,
+        isCurrentMonth: false,
+      });
+    }
+
+    return cells;
+  }, [calNavDate]);
+
+  // Format header date strictly as e.g. "7 Sept 2026"
+  const headerDateString = formatDiaryHeaderDate(currentDate);
+
+  // Date breakdown matching reference screenshot: Day number (28), Day of week (Fri), Year.Month (2026.8)
+  const parsedDate = useMemo(() => {
+    try {
+      const [y, m, d] = currentDate.split('-').map(Number);
+      const dt = new Date(y, m - 1, d);
+      const dayNum = d;
+      const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
+      const yearMonth = `${y}.${m}`;
+      return { dayNum, weekday, yearMonth };
+    } catch {
+      const dt = new Date();
+      return {
+        dayNum: dt.getDate(),
+        weekday: dt.toLocaleDateString('en-US', { weekday: 'short' }),
+        yearMonth: `${dt.getFullYear()}.${dt.getMonth() + 1}`,
+      };
+    }
+  }, [currentDate]);
+
+  // Word count memo from content
+  const wordCount = useMemo(() => {
+    if (!content) return 0;
+    const clean = content
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .trim();
+    if (!clean) return 0;
+    return clean.split(/\s+/).filter(Boolean).length;
+  }, [content]);
+
+  // Check if editor content is visually empty
+  const isEditorEmpty = useMemo(() => {
+    if (!content) return true;
+    const clean = content
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, '')
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .trim();
+    return clean.length === 0;
+  }, [content]);
+
+  // Auto-format markdown when user types:
+  // e.g. **text** -> bold
+  //      *text*   -> italic
+  //      "- "     -> unordered list
+  //      "> "     -> blockquote
+  const checkAndApplyAutoMarkdown = useCallback((_editor: HTMLDivElement): boolean => {
+    try {
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.anchorNode) return false;
+      const node = sel.anchorNode;
+      if (node.nodeType !== Node.TEXT_NODE) return false;
+
+      const text = node.textContent || '';
+      const offset = sel.anchorOffset;
+      const textBeforeCursor = text.slice(0, offset);
+
+      // 1. Auto-Bold: **text**
+      const boldMatch = /(?:^|[^*])\*\*([^*]+)\*\*$/.exec(textBeforeCursor);
+      if (boldMatch) {
+        const fullMatch = boldMatch[0];
+        const boldText = boldMatch[1];
+        const matchIndex = boldMatch.index + (fullMatch.startsWith('**') ? 0 : 1);
+        const beforeText = text.slice(0, matchIndex);
+        const afterText = text.slice(offset);
+
+        const parent = node.parentNode;
+        if (parent) {
+          const strongEl = document.createElement('strong');
+          strongEl.textContent = boldText;
+
+          const beforeNode = document.createTextNode(beforeText);
+          const afterNode = document.createTextNode(afterText || '\u200B');
+
+          parent.insertBefore(beforeNode, node);
+          parent.insertBefore(strongEl, node);
+          parent.insertBefore(afterNode, node);
+          parent.removeChild(node);
+
+          const newRange = document.createRange();
+          newRange.setStart(afterNode, afterText ? 0 : 1);
+          newRange.setEnd(afterNode, afterText ? 0 : 1);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+          return true;
+        }
+      }
+
+      // 2. Auto-Italic: *text* (excluding **)
+      const italicMatch = /(?:^|[^*])\*([^*\s][^*]*)\*$/.exec(textBeforeCursor);
+      if (italicMatch && !italicMatch[0].includes('**')) {
+        const fullMatch = italicMatch[0];
+        const italicText = italicMatch[1];
+        const matchIndex = italicMatch.index + (fullMatch.startsWith('*') ? 0 : 1);
+        const beforeText = text.slice(0, matchIndex);
+        const afterText = text.slice(offset);
+
+        const parent = node.parentNode;
+        if (parent) {
+          const emEl = document.createElement('em');
+          emEl.textContent = italicText;
+
+          const beforeNode = document.createTextNode(beforeText);
+          const afterNode = document.createTextNode(afterText || '\u200B');
+
+          parent.insertBefore(beforeNode, node);
+          parent.insertBefore(emEl, node);
+          parent.insertBefore(afterNode, node);
+          parent.removeChild(node);
+
+          const newRange = document.createRange();
+          newRange.setStart(afterNode, afterText ? 0 : 1);
+          newRange.setEnd(afterNode, afterText ? 0 : 1);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+          return true;
+        }
+      }
+
+      // 3. Bullet List: "- " or "* " at start of paragraph
+      if (textBeforeCursor === '- ' || textBeforeCursor === '* ') {
+        node.textContent = text.slice(2);
+        document.execCommand('insertUnorderedList', false);
+        return true;
+      }
+
+      // 4. Quote: "> " at start of paragraph
+      if (textBeforeCursor === '> ') {
+        node.textContent = text.slice(2);
+        document.execCommand('formatBlock', false, '<blockquote>');
+        return true;
+      }
+
+      // 5. Highlight: ==text==
+      const highlightMatch = /==([^=]+)==$/.exec(textBeforeCursor);
+      if (highlightMatch) {
+        const fullMatch = highlightMatch[0];
+        const hlText = highlightMatch[1];
+        const matchIndex = textBeforeCursor.lastIndexOf(fullMatch);
+        const beforeText = text.slice(0, matchIndex);
+        const afterText = text.slice(offset);
+
+        const parent = node.parentNode;
+        if (parent) {
+          const markEl = document.createElement('mark');
+          markEl.className = 'bg-amber-200/90 dark:bg-amber-400/35 px-1 py-0.5 rounded text-inherit font-medium';
+          markEl.textContent = hlText;
+
+          const beforeNode = document.createTextNode(beforeText);
+          const afterNode = document.createTextNode(afterText || '\u200B');
+
+          parent.insertBefore(beforeNode, node);
+          parent.insertBefore(markEl, node);
+          parent.insertBefore(afterNode, node);
+          parent.removeChild(node);
+
+          const newRange = document.createRange();
+          newRange.setStart(afterNode, afterText ? 0 : 1);
+          newRange.setEnd(afterNode, afterText ? 0 : 1);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+          return true;
+        }
+      }
+    } catch {
+      // Ignore
+    }
+    return false;
+  }, []);
+
+  // Update active state of Bold, Italic, List, Quote, Highlight, Heading based on current selection
+  const updateActiveFormats = useCallback(() => {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      if (editorRef.current && !editorRef.current.contains(sel.anchorNode)) {
+        return;
+      }
+
+      const bold = document.queryCommandState('bold');
+      const italic = document.queryCommandState('italic');
+      const list = document.queryCommandState('insertUnorderedList');
+
+      let quote = false;
+      let highlight = false;
+      let heading = false;
+      let curr: Node | null = sel.anchorNode;
+      while (curr && curr !== editorRef.current) {
+        if (curr.nodeName === 'BLOCKQUOTE') {
+          quote = true;
+        } else if (curr.nodeName === 'MARK') {
+          highlight = true;
+        } else if (curr.nodeName === 'H2' || curr.nodeName === 'H3') {
+          heading = true;
+        }
+        curr = curr.parentNode;
+      }
+
+      setActiveFormats({ bold, italic, list, quote, highlight, heading });
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  // Listen to selection changes across the document
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleSelectionChange = () => {
+      if (editorRef.current && editorRef.current.contains(document.activeElement)) {
+        updateActiveFormats();
+      }
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, [isOpen, updateActiveFormats]);
+
+  // Toggle formatting in editor
+  const handleToggleFormatting = (type: 'bold' | 'italic' | 'list' | 'quote') => {
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      if (type === 'bold') {
+        document.execCommand('bold', false);
+      } else if (type === 'italic') {
+        document.execCommand('italic', false);
+      } else if (type === 'list') {
+        document.execCommand('insertUnorderedList', false);
+      } else if (type === 'quote') {
+        if (activeFormats.quote) {
+          document.execCommand('formatBlock', false, '<p>');
+        } else {
+          document.execCommand('formatBlock', false, '<blockquote>');
+        }
+      }
+      handleEditorInput();
+    }
+  };
+
+  // Toggle text highlight (pastel yellow marker matching reference image)
+  const handleToggleHighlight = () => {
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+        const range = sel.getRangeAt(0);
+        let parent: Node | null = range.commonAncestorContainer;
+        let markNode: HTMLElement | null = null;
+        while (parent && parent !== editorRef.current) {
+          if (parent.nodeName === 'MARK') {
+            markNode = parent as HTMLElement;
+            break;
+          }
+          parent = parent.parentNode;
+        }
+        if (markNode) {
+          const text = markNode.textContent || '';
+          const textNode = document.createTextNode(text);
+          markNode.parentNode?.replaceChild(textNode, markNode);
+        } else {
+          const mark = document.createElement('mark');
+          mark.className = 'bg-amber-200/90 dark:bg-amber-400/35 px-1 py-0.5 rounded text-inherit font-medium';
+          mark.appendChild(range.extractContents());
+          range.insertNode(mark);
+        }
+      } else {
+        document.execCommand('hiliteColor', false, '#fef08a');
+      }
+      handleEditorInput();
+    }
+  };
+
+  // Toggle title/heading 3
+  const handleToggleHeading = () => {
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      if (activeFormats.heading) {
+        document.execCommand('formatBlock', false, '<p>');
+      } else {
+        document.execCommand('formatBlock', false, '<h3>');
+      }
+      handleEditorInput();
+    }
+  };
+
+  // Handle input in contentEditable editor
+  const handleEditorInput = () => {
+    if (editorRef.current) {
+      checkAndApplyAutoMarkdown(editorRef.current);
+      setContent(editorRef.current.innerHTML);
+    }
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    updateActiveFormats();
+  };
+
+  // Handle paste in contentEditable editor
+  const handleEditorPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (text && (text.includes('**') || text.includes('*') || text.includes('> ') || text.includes('- '))) {
+      e.preventDefault();
+      const formatted = formatInitialHtml(text);
+      document.execCommand('insertHTML', false, formatted);
+      handleEditorInput();
+    }
+  };
+
+  // Handle keyboard shortcuts (Tab for indentation, Backspace to revert auto-markdown)
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      document.execCommand('insertText', false, '  ');
+      return;
+    }
+
+    if (e.key === 'Backspace') {
+      const sel = window.getSelection();
+      if (!sel || !sel.isCollapsed || !sel.anchorNode) return;
+
+      const node = sel.anchorNode;
+      const offset = sel.anchorOffset;
+
+      let targetStrong: HTMLElement | null = null;
+      let targetEm: HTMLElement | null = null;
+      let targetMark: HTMLElement | null = null;
+      let zeroWidthNode: Node | null = null;
+
+      if (node.nodeType === Node.TEXT_NODE) {
+        const textVal = node.textContent || '';
+        const isAtStartOrZeroWidth =
+          offset === 0 ||
+          (offset === 1 && (textVal === '\u200B' || textVal.startsWith('\u200B')));
+
+        if (isAtStartOrZeroWidth) {
+          const prev = node.previousSibling;
+          if (prev && (prev.nodeName === 'STRONG' || prev.nodeName === 'B')) {
+            targetStrong = prev as HTMLElement;
+            zeroWidthNode = textVal === '\u200B' || textVal === '' ? node : null;
+          } else if (prev && (prev.nodeName === 'EM' || prev.nodeName === 'I')) {
+            targetEm = prev as HTMLElement;
+            zeroWidthNode = textVal === '\u200B' || textVal === '' ? node : null;
+          } else if (prev && prev.nodeName === 'MARK') {
+            targetMark = prev as HTMLElement;
+            zeroWidthNode = textVal === '\u200B' || textVal === '' ? node : null;
+          }
+        }
+
+        if (!targetStrong && !targetEm && !targetMark) {
+          const parentEl = node.parentElement;
+          if (parentEl && (parentEl.nodeName === 'STRONG' || parentEl.nodeName === 'B')) {
+            if (offset === textVal.length) {
+              targetStrong = parentEl;
+            }
+          } else if (parentEl && (parentEl.nodeName === 'EM' || parentEl.nodeName === 'I')) {
+            if (offset === textVal.length) {
+              targetEm = parentEl;
+            }
+          } else if (parentEl && parentEl.nodeName === 'MARK') {
+            if (offset === textVal.length) {
+              targetMark = parentEl;
+            }
+          }
+        }
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        const prevChild = el.childNodes[offset - 1];
+        if (prevChild && (prevChild.nodeName === 'STRONG' || prevChild.nodeName === 'B')) {
+          targetStrong = prevChild as HTMLElement;
+        } else if (prevChild && (prevChild.nodeName === 'EM' || prevChild.nodeName === 'I')) {
+          targetEm = prevChild as HTMLElement;
+        } else if (prevChild && prevChild.nodeName === 'MARK') {
+          targetMark = prevChild as HTMLElement;
+        }
+      }
+
+      if (targetStrong) {
+        e.preventDefault();
+        const boldText = targetStrong.textContent?.replace(/[\u200B-\u200D\uFEFF]/g, '') || '';
+        const parent = targetStrong.parentNode;
+        if (parent) {
+          const restored = `**${boldText}*`;
+          const textNode = document.createTextNode(restored);
+
+          if (zeroWidthNode) {
+            parent.removeChild(zeroWidthNode);
+          } else if (node && node.nodeType === Node.TEXT_NODE && node.textContent?.startsWith('\u200B')) {
+            node.textContent = node.textContent.slice(1);
+          }
+
+          const next = targetStrong.nextSibling;
+          if (next && next !== zeroWidthNode && next.nodeType === Node.TEXT_NODE) {
+            if (next.textContent === '\u200B') {
+              parent.removeChild(next);
+            } else if (next.textContent?.startsWith('\u200B')) {
+              next.textContent = next.textContent.slice(1);
+            }
+          }
+
+          parent.replaceChild(textNode, targetStrong);
+
+          const newRange = document.createRange();
+          newRange.setStart(textNode, restored.length);
+          newRange.setEnd(textNode, restored.length);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+
+          handleEditorInput();
+          return;
+        }
+      }
+
+      if (targetEm) {
+        e.preventDefault();
+        const italicText = targetEm.textContent?.replace(/[\u200B-\u200D\uFEFF]/g, '') || '';
+        const parent = targetEm.parentNode;
+        if (parent) {
+          const restored = `*${italicText}`;
+          const textNode = document.createTextNode(restored);
+
+          if (zeroWidthNode) {
+            parent.removeChild(zeroWidthNode);
+          } else if (node && node.nodeType === Node.TEXT_NODE && node.textContent?.startsWith('\u200B')) {
+            node.textContent = node.textContent.slice(1);
+          }
+
+          const next = targetEm.nextSibling;
+          if (next && next !== zeroWidthNode && next.nodeType === Node.TEXT_NODE) {
+            if (next.textContent === '\u200B') {
+              parent.removeChild(next);
+            } else if (next.textContent?.startsWith('\u200B')) {
+              next.textContent = next.textContent.slice(1);
+            }
+          }
+
+          parent.replaceChild(textNode, targetEm);
+
+          const newRange = document.createRange();
+          newRange.setStart(textNode, restored.length);
+          newRange.setEnd(textNode, restored.length);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+
+          handleEditorInput();
+          return;
+        }
+      }
+
+      if (targetMark) {
+        e.preventDefault();
+        const markText = targetMark.textContent?.replace(/[\u200B-\u200D\uFEFF]/g, '') || '';
+        const parent = targetMark.parentNode;
+        if (parent) {
+          const restored = `==${markText}=`;
+          const textNode = document.createTextNode(restored);
+
+          if (zeroWidthNode) {
+            parent.removeChild(zeroWidthNode);
+          } else if (node && node.nodeType === Node.TEXT_NODE && node.textContent?.startsWith('\u200B')) {
+            node.textContent = node.textContent.slice(1);
+          }
+
+          const next = targetMark.nextSibling;
+          if (next && next !== zeroWidthNode && next.nodeType === Node.TEXT_NODE) {
+            if (next.textContent === '\u200B') {
+              parent.removeChild(next);
+            } else if (next.textContent?.startsWith('\u200B')) {
+              next.textContent = next.textContent.slice(1);
+            }
+          }
+
+          parent.replaceChild(textNode, targetMark);
+
+          const newRange = document.createRange();
+          newRange.setStart(textNode, restored.length);
+          newRange.setEnd(textNode, restored.length);
+          sel.removeAllRanges();
+          sel.addRange(newRange);
+
+          handleEditorInput();
+          return;
+        }
+      }
+    }
+  };
+
+  // Save handler: requires title, saves, and closes the drawer
+  const handleSave = () => {
+    if (!note) return;
+    if (!title.trim()) {
+      setTitleError(true);
+      titleInputRef.current?.focus();
+      triggerHaptic('warning');
+      return;
+    }
+    triggerHaptic('medium');
+    let finalContent = editorRef.current ? editorRef.current.innerHTML : content;
+    if (finalContent) {
+      finalContent = finalContent
+        .replace(/ style="[^"]*"/gi, '')
+        .replace(/<span\s*>([\s\S]*?)<\/span>/gi, '$1');
+    }
+    const updated: NoteItem = {
+      ...note,
+      title: title.trim(),
+      content: finalContent,
+      date: currentDate,
+      mood: currentMood,
+      images,
+      voiceNotes,
+      hasVoiceNote: voiceNotes.length > 0,
+      voiceAudioUrl: voiceNotes[0]?.audioUrl,
+      voiceDuration: voiceNotes[0]?.duration,
+      imageUrl: images[0],
+      isDiary: true,
+      entryType: 'diary',
+    };
+
+    onUpdateNote?.(updated);
+    setIsSavedJustNow(true);
+    onClose();
+  };
+
+  // Photo upload handler
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    Array.from(files).forEach((file: File) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === 'string') {
+          setImages((prev) => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  // Remove photo
+  const handleRemovePhoto = (index: number) => {
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Voice recording toggle
+  const handleToggleRecord = () => {
+    triggerHaptic('medium');
+    if (!isRecording) {
+      setIsRecording(true);
+      setRecordDuration(0);
+      recordIntervalRef.current = setInterval(() => {
+        setRecordDuration((prev) => prev + 1);
+      }, 1000);
+    } else {
+      // Finish recording
+      setIsRecording(false);
+      setIsSavedJustNow(false);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (recordIntervalRef.current) {
+        clearInterval(recordIntervalRef.current);
+      }
+      const minutes = Math.floor(recordDuration / 60);
+      const seconds = recordDuration % 60;
+      const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+      const audioBlob = createSampleAudioBlob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      const newVN: VoiceNoteAttachment = {
+        id: `vn-${Date.now()}`,
+        audioUrl,
+        duration: formattedDuration === '0:00' ? '0:05' : formattedDuration,
+        name: `Reflection Voice Note`,
+        createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+      setVoiceNotes((prev) => [...prev, newVN]);
+    }
+  };
+
+  // Play voice note
   const togglePlayVoiceNote = (vn: VoiceNoteAttachment) => {
     if (activePlayingId === vn.id && audioRef.current) {
       if (audioRef.current.paused) {
@@ -141,9 +945,7 @@ export function DiaryDrawer({
             setActivePlayingId(vn.id);
             triggerHaptic('selection');
           })
-          .catch((e) => {
-            console.warn('Audio play error:', e);
-          });
+          .catch((err) => console.warn(err));
       } else {
         audioRef.current.pause();
         setActivePlayingId(null);
@@ -160,8 +962,6 @@ export function DiaryDrawer({
     const url = vn.audioUrl || URL.createObjectURL(createSampleAudioBlob());
     const audio = new Audio(url);
     audioRef.current = audio;
-    audio.currentTime = 0;
-    setPlaybackTime(0);
 
     audio.ontimeupdate = () => {
       setPlaybackTime(Math.floor(audio.currentTime));
@@ -170,7 +970,6 @@ export function DiaryDrawer({
     audio.onended = () => {
       setActivePlayingId(null);
       setPlaybackTime(0);
-      triggerHaptic('light');
     };
 
     audio
@@ -179,43 +978,35 @@ export function DiaryDrawer({
         setActivePlayingId(vn.id);
         triggerHaptic('selection');
       })
-      .catch((e) => {
-        console.warn('Audio play error:', e);
-        setActivePlayingId(null);
-      });
+      .catch((err) => console.warn(err));
   };
 
-  const handleToggleContentCheckbox = (lineIndex: number) => {
-    if (!note.content) return;
-    const lines = note.content.split('\n');
-    if (lineIndex < 0 || lineIndex >= lines.length) return;
-    const targetLine = lines[lineIndex];
-    const match = targetLine.match(/^(\s*[-*•]?\s*\[)( |x|X)(\]\s*.*)$/);
-    if (match) {
-      const currentCompleted = match[2].toLowerCase() === 'x';
-      const newMark = currentCompleted ? ' ' : 'x';
-      lines[lineIndex] = `${match[1]}${newMark}${match[3]}`;
-      const newContent = lines.join('\n');
-      triggerHaptic('selection');
-      if (onUpdateNote) {
-        onUpdateNote({
-          ...note,
-          content: newContent,
-        });
-      }
+  // Remove voice note
+  const handleRemoveVoiceNote = (id: string) => {
+    triggerHaptic('light');
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setVoiceNotes((prev) => prev.filter((vn) => vn.id !== id));
+  };
+
+  // Insert prompt helper
+  const handleInsertPrompt = (promptText: string) => {
+    triggerHaptic('selection');
+    setIsPromptsOpen(false);
+    setIsSavedJustNow(false);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    const addition = `<blockquote>✨ <strong>${promptText}</strong></blockquote><p><br/></p>`;
+    const next = (content ? content + '<br/>' : '') + addition;
+    setContent(next);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = next;
+      editorRef.current.focus();
     }
-  };
-
-  const handleCopy = () => {
-    const fullText = `${note.title}\n\n${note.content || ''}`;
-    navigator.clipboard.writeText(fullText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
     <AnimatePresence>
-      {isOpen && (
+      {isOpen && note && (
         <div
           style={{
             paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
@@ -223,30 +1014,33 @@ export function DiaryDrawer({
           }}
           className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
         >
-          {/* Backdrop */}
+          {/* Backdrop matching default app theme */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            onClick={() => {
+              triggerHaptic('light');
+              onClose();
+            }}
+            className="absolute inset-0 bg-black/75 backdrop-blur-md cursor-pointer"
           />
 
-          {/* Drawer / Modal Sheet */}
+          {/* Drawer / Modal Sheet matching default app theme (full-length drawer) */}
           <motion.div
-            initial={isDesktop ? { opacity: 0, scale: 0.94 } : { y: '100%' }}
+            initial={isDesktop ? { opacity: 0, scale: 0.95 } : { y: '100%' }}
             animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
-            exit={isDesktop ? { opacity: 0, scale: 0.94 } : { y: '100%' }}
+            exit={isDesktop ? { opacity: 0, scale: 0.95 } : { y: '100%' }}
             transition={
               isDesktop
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
                 : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
-            className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl flex flex-col max-h-[88vh] md:max-h-[82vh] overflow-hidden transition-colors ${
+            className={`relative w-full max-w-lg md:max-w-2xl mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-5 pb-4 px-5 md:px-7 shadow-2xl flex flex-col h-[94vh] md:h-[88vh] overflow-hidden transition-colors ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
             }`}
           >
-            {/* Top drag handle (mobile only) */}
+            {/* Top Drag Handle for mobile */}
             <div className="flex justify-center pb-2 md:hidden">
               <div
                 className={`w-9 h-1 rounded-full ${
@@ -255,360 +1049,781 @@ export function DiaryDrawer({
               />
             </div>
 
-            {/* Header */}
-            <div className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
-                    note.entryType === 'diary'
-                      ? isDark
-                        ? 'bg-purple-500/15 text-purple-300'
-                        : 'bg-purple-50 text-purple-600'
-                      : note.isTodo || note.entryType === 'todo'
-                      ? isDark
-                        ? 'bg-emerald-500/15 text-emerald-300'
-                        : 'bg-emerald-50 text-emerald-600'
-                      : note.isSafe || note.isVault || note.entryType === 'passwords'
-                      ? isDark
-                        ? 'bg-amber-500/15 text-amber-300'
-                        : 'bg-amber-50 text-amber-600'
-                      : isDark
-                      ? 'bg-sky-500/15 text-sky-300'
-                      : 'bg-sky-50 text-sky-600'
-                  }`}
-                >
-                  {note.entryType === 'diary' ? (
-                    <BookOpen className="w-5 h-5 stroke-[2]" />
-                  ) : note.isTodo || note.entryType === 'todo' ? (
-                    <ListTodo className="w-5 h-5 stroke-[2]" />
-                  ) : note.isSafe || note.isVault || note.entryType === 'passwords' ? (
-                    <KeyRound className="w-5 h-5 stroke-[2]" />
-                  ) : (
-                    <Feather className="w-5 h-5 stroke-[2]" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold tracking-tight truncate leading-tight">
-                    {capitalizeFirstChar(note.title)}
-                  </h2>
-                  <div
-                    className={`text-[11.5px] flex items-center gap-1.5 mt-0.5 ${
-                      isDark ? 'text-neutral-400' : 'text-neutral-500'
+            {/* Hidden Photo File Input */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*"
+              multiple
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
+
+            {/* Header: Clean, borderless, matching default app theme (NO SPLIT LINES) */}
+            <div className="flex items-center justify-between py-1.5 shrink-0 relative z-30">
+              {/* Top Left: Single-line Elegant Date Button */}
+              <div className="flex items-center gap-2 min-w-0">
+                {/* Date in format "7 Sept 2026" / "4 Sept 2001", clean single line badge, clicking opens calendar */}
+                <div className="relative shrink-0" ref={calendarPopoverRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('selection');
+                      setIsCalendarOpen((prev) => !prev);
+                    }}
+                    className={`h-8 sm:h-9 px-3 rounded-full inline-flex items-center gap-2 text-xs sm:text-sm font-medium tracking-tight whitespace-nowrap transition-all active:scale-95 cursor-pointer select-none shrink-0 ${
+                      isDark
+                        ? 'bg-[#1e1e22] hover:bg-[#28282e] text-neutral-200'
+                        : 'bg-neutral-100 hover:bg-neutral-200/80 text-neutral-800'
                     }`}
+                    title="Change date"
                   >
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {note.date}
-                    </span>
-                  </div>
+                    <Calendar className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                    <span className="whitespace-nowrap font-medium text-inherit">{headerDateString}</span>
+                    {currentMood && (
+                      <span className="text-sm select-none shrink-0" title={`Mood: ${currentMood}`}>
+                        {currentMood}
+                      </span>
+                    )}
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 opacity-60 transition-transform duration-200 shrink-0 ${
+                        isCalendarOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {/* Calendar Popover */}
+                  <AnimatePresence>
+                    {isCalendarOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        className={`absolute left-0 top-full mt-2 w-72 sm:w-80 rounded-2xl border shadow-2xl p-4 z-50 transition-colors ${
+                          isDark
+                            ? 'bg-[#18181b] border-neutral-800 text-white shadow-black/80'
+                            : 'bg-white border-neutral-200 text-neutral-900 shadow-xl'
+                        }`}
+                      >
+                        {/* Calendar Month Navigation */}
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-sm font-bold tracking-tight">
+                            {calNavDate.toLocaleDateString('en-US', {
+                              month: 'long',
+                              year: 'numeric',
+                            })}
+                          </h4>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('light');
+                                setCalNavDate(
+                                  (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                                );
+                              }}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                isDark ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-600'
+                              }`}
+                            >
+                              <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('light');
+                                setIsSavedJustNow(false);
+                                if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                const now = new Date();
+                                setCalNavDate(new Date(now.getFullYear(), now.getMonth(), 1));
+                                setCurrentDate(formatDateToISO(now));
+                                setIsCalendarOpen(false);
+                              }}
+                              className={`text-[11px] px-2 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
+                                isDark ? 'hover:bg-neutral-800 text-purple-400' : 'hover:bg-neutral-100 text-purple-600'
+                              }`}
+                            >
+                              Today
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('light');
+                                setCalNavDate(
+                                  (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                                );
+                              }}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                isDark ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-600'
+                              }`}
+                            >
+                              <ChevronRight className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Weekday headers */}
+                        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-neutral-400 mb-2">
+                          <span>M</span>
+                          <span>T</span>
+                          <span>W</span>
+                          <span>T</span>
+                          <span>F</span>
+                          <span>S</span>
+                          <span>S</span>
+                        </div>
+
+                        {/* Days Grid */}
+                        <div className="grid grid-cols-7 gap-1">
+                          {calendarDays.map((cell, idx) => {
+                            const isSelected = cell.dateStr === currentDate;
+                            const isToday = cell.dateStr === formatDateToISO(new Date());
+
+                            return (
+                              <button
+                                key={`cal-day-${idx}-${cell.dateStr}`}
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('selection');
+                                  setIsSavedJustNow(false);
+                                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                  setCurrentDate(cell.dateStr);
+                                  setIsCalendarOpen(false);
+                                }}
+                                className={`h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-purple-600 text-white shadow-xs'
+                                    : isToday
+                                    ? isDark
+                                      ? 'border border-purple-500/50 text-purple-300 hover:bg-purple-500/10'
+                                      : 'border border-purple-400 text-purple-700 hover:bg-purple-50'
+                                    : cell.isCurrentMonth
+                                    ? isDark
+                                      ? 'hover:bg-neutral-800 text-neutral-200'
+                                      : 'hover:bg-neutral-100 text-neutral-800'
+                                    : isDark
+                                    ? 'text-neutral-600 hover:bg-neutral-800/40'
+                                    : 'text-neutral-400 hover:bg-neutral-100/50'
+                                }`}
+                              >
+                                {cell.dayNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                {/* More options button (...) inside sub drawer with Edit, Fav, Copy, Delete */}
-                <SubDrawerMoreMenu
-                  theme={theme}
-                  isFavorite={note.isFavorite}
-                  onToggleFavorite={onToggleFavorite ? () => onToggleFavorite(note.id) : undefined}
-                  onCopy={() => {
-                    const text = `${note.title ? `${note.title}\n\n` : ''}${note.content || ''}`;
-                    navigator.clipboard?.writeText(text);
-                  }}
-                  onEdit={onEdit ? () => onEdit(note) : undefined}
-                  onDelete={
-                    onDelete
-                      ? () => {
-                          onDelete(note.id);
-                          onClose();
-                        }
-                      : undefined
-                  }
-                  itemTypeLabel="Note"
-                />
+              {/* Right: More menu (...) with Header Extras + Dedicated Save button */}
+              <div className="flex items-center gap-2 shrink-0 relative">
+                {/* More Menu (...) containing Header Extras */}
+                <div ref={moreMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setIsMoreMenuOpen((prev) => !prev);
+                    }}
+                    className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors active:scale-95 cursor-pointer ${
+                      isMoreMenuOpen
+                        ? isDark
+                          ? 'bg-neutral-800 text-white'
+                          : 'bg-neutral-200 text-neutral-900'
+                        : isDark
+                        ? 'bg-[#1e1e22] hover:bg-[#28282e] text-neutral-300'
+                        : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'
+                    }`}
+                    title="More options"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
 
+                  <AnimatePresence>
+                    {isMoreMenuOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 6 }}
+                        transition={{ duration: 0.14, ease: 'easeOut' }}
+                        className={`absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2.5rem)] origin-top-right rounded-2xl border shadow-2xl p-2 z-50 ${
+                          isDark
+                            ? 'bg-[#18181b] border-neutral-800 text-white shadow-black/80'
+                            : 'bg-white border-neutral-200 text-neutral-900 shadow-xl'
+                        }`}
+                      >
+                        {/* Section 1: Mood Selector */}
+                        <div className="px-2 pt-1 pb-2">
+                          <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-2">
+                            <span>Mood</span>
+                            {currentMood && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('light');
+                                  setIsSavedJustNow(false);
+                                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                  setCurrentMood(undefined);
+                                }}
+                                className="text-[10px] text-neutral-400 hover:text-red-400 transition-colors lowercase cursor-pointer"
+                              >
+                                clear
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {MOOD_OPTIONS.map((opt) => (
+                              <button
+                                key={`more-mood-${opt.label}`}
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('selection');
+                                  setIsSavedJustNow(false);
+                                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                  setCurrentMood(currentMood === opt.emoji ? undefined : opt.emoji);
+                                }}
+                                className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg transition-all cursor-pointer ${
+                                  currentMood === opt.emoji
+                                    ? 'bg-purple-600/30 ring-2 ring-purple-500 scale-105'
+                                    : isDark
+                                    ? 'bg-[#222226] hover:bg-[#2c2c32]'
+                                    : 'bg-neutral-100 hover:bg-neutral-200'
+                                }`}
+                                title={opt.label}
+                              >
+                                {opt.emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Section 2: Header Extras */}
+                        <div className="space-y-0.5 pt-1">
+                          {/* Attach Photos */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic('light');
+                              fileInputRef.current?.click();
+                              setIsMoreMenuOpen(false);
+                            }}
+                            className={`w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                              isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                            }`}
+                          >
+                            <ImageIcon className="w-4 h-4 text-purple-400 stroke-[2]" />
+                            <span>Attach Photos {images.length > 0 ? `(${images.length})` : ''}</span>
+                          </button>
+
+                          {/* Record Voice Note */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMoreMenuOpen(false);
+                              handleToggleRecord();
+                            }}
+                            className={`w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                              isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                            }`}
+                          >
+                            <Mic className={`w-4 h-4 stroke-[2] ${isRecording ? 'text-rose-500 animate-pulse' : 'text-rose-400'}`} />
+                            <span>{isRecording ? 'Stop Recording' : 'Record Voice Memo'}</span>
+                          </button>
+
+                          {/* Reflection Prompts */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic('light');
+                              setIsMoreMenuOpen(false);
+                              setIsPromptsOpen(true);
+                            }}
+                            className={`w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                              isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                            }`}
+                          >
+                            <Sparkles className="w-4 h-4 text-amber-400 stroke-[2]" />
+                            <span>Journaling Prompts</span>
+                          </button>
+                        </div>
+
+                        {/* Subtle Divider */}
+                        <div className={`my-1.5 h-px ${isDark ? 'bg-neutral-800' : 'bg-neutral-100'}`} />
+
+                        {/* Section 3: Note Actions */}
+                        <div className="space-y-0.5">
+                          {onToggleFavorite && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('light');
+                                onToggleFavorite(note.id);
+                                setIsMoreMenuOpen(false);
+                              }}
+                              className={`w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                                isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                              }`}
+                            >
+                              <Bookmark
+                                className={`w-4 h-4 stroke-[2] ${
+                                  note.isFavorite ? 'text-amber-400 fill-amber-400' : 'text-neutral-400'
+                                }`}
+                              />
+                              <span>{note.isFavorite ? 'Remove from Fav' : 'Add to Fav'}</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic('light');
+                              const fullText = `${title}\n\n${stripHtml(content)}`;
+                              navigator.clipboard?.writeText(fullText);
+                              setCopied(true);
+                              setIsMoreMenuOpen(false);
+                              setTimeout(() => setCopied(false), 2000);
+                            }}
+                            className={`w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium transition-colors cursor-pointer ${
+                              isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                            }`}
+                          >
+                            {copied ? (
+                              <Check className="w-4 h-4 text-emerald-400 stroke-[2.5]" />
+                            ) : (
+                              <Copy className="w-4 h-4 text-neutral-400 stroke-[2]" />
+                            )}
+                            <span>{copied ? 'Copied!' : 'Copy Content'}</span>
+                          </button>
+
+                          {onDelete && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('medium');
+                                onDelete(note.id);
+                                setIsMoreMenuOpen(false);
+                                onClose();
+                              }}
+                              className="w-full px-2.5 py-2 rounded-xl flex items-center gap-2.5 text-xs font-medium transition-colors text-red-400 hover:bg-red-500/10 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4 stroke-[2]" />
+                              <span>Delete Entry</span>
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Save Button */}
                 <button
-                  id="diary-drawer-close-btn"
                   type="button"
-                  onClick={onClose}
-                  className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
-                    isDark
-                      ? 'bg-[#1e1e1e] text-neutral-300 hover:text-white'
-                      : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                  onClick={handleSave}
+                  className={`h-8 sm:h-9 px-3.5 sm:px-4 rounded-full font-medium text-xs sm:text-sm flex items-center gap-1.5 active:scale-95 transition-all shadow-xs cursor-pointer select-none shrink-0 ${
+                    isSavedJustNow
+                      ? isDark
+                        ? 'bg-neutral-200 text-neutral-900 font-semibold'
+                        : 'bg-neutral-800 text-white font-semibold'
+                      : isDark
+                      ? 'bg-white text-neutral-950 hover:bg-neutral-100 shadow-sm'
+                      : 'bg-neutral-900 text-white hover:bg-neutral-800 shadow-sm'
                   }`}
-                  aria-label="Close"
-                  title="Close"
                 >
-                  <X className="w-4 h-4" />
+                  {isSavedJustNow ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Saved</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5 stroke-[2.2]" />
+                      <span>Save</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
 
-            {/* Note Content Body */}
-            <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 py-3 my-1">
-              {/* Voice Notes List */}
-              {allVoiceNotes.length > 0 && (
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsVoiceCollapsed((prev) => !prev)}
-                    className={`w-full flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider px-1 py-1 rounded-lg transition-colors text-left ${
-                      isDark ? 'text-neutral-400 hover:text-neutral-200' : 'text-neutral-500 hover:text-neutral-800'
-                    }`}
-                  >
-                    <span>Voice Notes ({allVoiceNotes.length})</span>
-                    <span className="flex items-center gap-1 text-[11px] normal-case text-neutral-400 font-normal">
-                      {isVoiceCollapsed ? 'Show' : 'Hide'}
-                      {isVoiceCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-                    </span>
-                  </button>
+            {/* Active Recording Banner */}
+            {isRecording && (
+              <div className="my-2 bg-rose-500/10 rounded-2xl px-4 py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                  <span className="text-xs font-semibold text-rose-400">
+                    Recording Voice Note... ({Math.floor(recordDuration / 60)}:{(recordDuration % 60).toString().padStart(2, '0')})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleRecord}
+                  className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-500 hover:bg-rose-600 text-white transition-colors cursor-pointer"
+                >
+                  Stop & Save
+                </button>
+              </div>
+            )}
 
-                  {!isVoiceCollapsed && (
-                    <div className="space-y-2">
-                      {allVoiceNotes.map((vn, idx) => {
-                        const isThisPlaying = activePlayingId === vn.id;
-                        return (
-                          <div
-                            key={vn.id ? `diary-vn-${vn.id}-${idx}` : `diary-vn-${idx}`}
-                            className={`p-3.5 rounded-2xl border flex items-center gap-3 transition-colors ${
-                              isDark
-                                ? 'bg-[#1a1a1a] border-neutral-800 text-white'
-                                : 'bg-emerald-50/70 border-emerald-200 text-neutral-900 shadow-sm'
-                            }`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => togglePlayVoiceNote(vn)}
-                              className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 active:scale-95 transition-all shadow-sm ${
-                                isThisPlaying
-                                  ? 'bg-emerald-500 text-white shadow-emerald-500/25 shadow-md'
-                                  : isDark
-                                  ? 'bg-[#262626] hover:bg-[#323232] text-emerald-400'
-                                  : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-700'
-                              }`}
-                              title={isThisPlaying ? 'Pause voice memo' : 'Play voice memo'}
-                              aria-label={isThisPlaying ? 'Pause voice memo' : 'Play voice memo'}
-                            >
-                              {isThisPlaying ? (
-                                <Pause className="w-4 h-4 fill-current" />
-                              ) : (
-                                <Play className="w-4 h-4 fill-current ml-0.5" />
-                              )}
-                            </button>
+            {/* INSIDE IT THERE WILL BE DIARY: Pure, distraction-free writing canvas */}
+            <div className="flex-1 overflow-y-auto no-scrollbar w-full pt-3 pb-2 flex flex-col gap-3">
+              {/* Title Input (Required, without (optional)) */}
+              <div className="flex flex-col gap-1 w-full">
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  value={title}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setIsSavedJustNow(false);
+                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                    if (titleError && e.target.value.trim()) {
+                      setTitleError(false);
+                    }
+                  }}
+                  placeholder="Title..."
+                  required
+                  className={`text-2xl sm:text-3xl font-bold tracking-tight bg-transparent border-b outline-hidden w-full transition-colors pb-1 ${
+                    titleError
+                      ? 'border-rose-500 placeholder:text-rose-400'
+                      : 'border-transparent'
+                  } ${
+                    isDark
+                      ? 'text-white placeholder:text-neutral-600'
+                      : 'text-neutral-900 placeholder:text-neutral-400'
+                  }`}
+                />
+                {titleError && (
+                  <span className="text-xs text-rose-500 font-medium">Title is required</span>
+                )}
+              </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs font-semibold tracking-tight truncate flex items-center gap-1.5">
-                                  <Mic className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                  <span className="truncate">{vn.name || `Voice Note ${idx + 1}`}</span>
-                                </span>
-                                <span className="text-[11px] font-mono text-neutral-400 shrink-0 ml-2">
-                                  {isThisPlaying
-                                    ? `${Math.floor(playbackTime / 60)}:${(playbackTime % 60)
-                                        .toString()
-                                        .padStart(2, '0')} / ${vn.duration || '0:15'}`
-                                    : vn.duration || '0:15'}
-                                </span>
-                              </div>
+              {/* Attached Photos Strip (if any) */}
+              {images.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+                    {images.map((imgSrc, idx) => (
+                      <div
+                        key={`attached-img-${idx}`}
+                        className="relative w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl overflow-hidden group shadow-xs cursor-pointer bg-neutral-900"
+                        onClick={() => setLightboxSrc(imgSrc)}
+                      >
+                        <img
+                          src={imgSrc}
+                          alt={`Attachment ${idx + 1}`}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemovePhoto(idx);
+                          }}
+                          className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-black/75 hover:bg-red-500 text-white flex items-center justify-center transition-colors cursor-pointer"
+                          title="Remove photo"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
 
-                              <div className="flex items-center gap-1 h-3">
-                                {[40, 75, 100, 60, 30, 85, 95, 50, 70, 40, 90, 60, 35, 80, 100, 65, 45, 85].map(
-                                  (heightPercent, barIdx) => (
-                                    <div
-                                      key={`diary-wave-${idx}-${barIdx}`}
-                                      className={`flex-1 rounded-full transition-all duration-150 ${
-                                        isThisPlaying
-                                          ? 'bg-emerald-400'
-                                          : isDark
-                                          ? 'bg-neutral-700'
-                                          : 'bg-emerald-300'
-                                      }`}
-                                      style={{
-                                        height: isThisPlaying
-                                          ? `${Math.max(
-                                              20,
-                                              Math.min(
-                                                100,
-                                                heightPercent *
-                                                  (0.35 +
-                                                    Math.abs(Math.sin(barIdx * 0.8 + playbackTime * 4)) *
-                                                      0.7)
-                                              )
-                                            )}%`
-                                          : `${Math.max(25, heightPercent * 0.45)}%`,
-                                      }}
-                                    />
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className={`w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-1 transition-colors cursor-pointer ${
+                        isDark
+                          ? 'border-neutral-800 hover:border-purple-500/50 text-neutral-500 hover:text-purple-400'
+                          : 'border-neutral-300 hover:border-purple-500/50 text-neutral-400 hover:text-purple-600'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4 stroke-[2]" />
+                      <span className="text-[10px] font-medium">Add photo</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Photos Gallery */}
-              {allImages.length > 0 && (
+              {/* Voice Notes Strip (if any) */}
+              {voiceNotes.length > 0 && (
                 <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsPhotosCollapsed((prev) => !prev)}
-                    className={`w-full flex items-center justify-between text-[10px] font-semibold uppercase tracking-wider px-1 py-1 rounded-lg transition-colors text-left ${
-                      isDark ? 'text-neutral-400 hover:text-neutral-200' : 'text-neutral-500 hover:text-neutral-800'
-                    }`}
-                  >
-                    <span>Attached Photos ({allImages.length})</span>
-                    <span className="flex items-center gap-1 text-[11px] normal-case text-neutral-400 font-normal">
-                      {isPhotosCollapsed ? 'Show' : 'Hide'}
-                      {isPhotosCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-                    </span>
-                  </button>
-
-                  {!isPhotosCollapsed && (
-                    <div
-                      className={`grid gap-2 ${
-                        allImages.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
-                      }`}
-                    >
-                      {allImages.map((imgSrc, imgIdx) => (
-                        <div
-                          key={`diary-img-${imgIdx}`}
-                          onClick={() => setLightboxImg(imgSrc)}
-                          className={`group relative rounded-2xl overflow-hidden max-h-60 border cursor-zoom-in active:scale-[0.98] transition-all ${
-                            isDark
-                              ? 'border-neutral-800 bg-neutral-900/40'
-                              : 'border-neutral-200/40 bg-neutral-50/50'
+                  {voiceNotes.map((vn, idx) => {
+                    const isThisPlaying = activePlayingId === vn.id;
+                    return (
+                      <div
+                        key={vn.id || `vn-${idx}`}
+                        className={`p-3 rounded-2xl flex items-center gap-3 transition-colors ${
+                          isDark
+                            ? 'bg-[#18181c] text-white'
+                            : 'bg-purple-50/70 text-neutral-900 shadow-xs'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => togglePlayVoiceNote(vn)}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer ${
+                            isThisPlaying
+                              ? 'bg-purple-600 text-white shadow-purple-500/25 shadow-md'
+                              : isDark
+                              ? 'bg-[#26262b] hover:bg-[#303036] text-purple-300'
+                              : 'bg-purple-100 hover:bg-purple-200 text-purple-700'
                           }`}
-                          title="Click to view full screen"
+                          title={isThisPlaying ? 'Pause' : 'Play'}
                         >
-                          <img
-                            src={imgSrc}
-                            alt={`${note.title} photo ${imgIdx + 1}`}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 text-white text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1 shadow-lg backdrop-blur-xs">
-                              <Maximize2 className="w-3 h-3" /> Fullscreen
+                          {isThisPlaying ? (
+                            <Pause className="w-3.5 h-3.5 fill-current" />
+                          ) : (
+                            <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                          )}
+                        </button>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold tracking-tight truncate flex items-center gap-1.5">
+                              <Mic className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                              <span>{vn.name || `Voice Note ${idx + 1}`}</span>
+                            </span>
+                            <span className="text-[11px] font-mono text-neutral-400 shrink-0">
+                              {isThisPlaying
+                                ? `${Math.floor(playbackTime / 60)}:${(playbackTime % 60).toString().padStart(2, '0')}`
+                                : vn.duration || '0:15'}
                             </span>
                           </div>
+
+                          {/* Visual Waveform */}
+                          <div className="flex items-center gap-1 h-2">
+                            {[40, 75, 100, 60, 30, 85, 95, 50, 70, 40, 90, 60, 35, 80, 100, 65, 45, 85].map(
+                              (hPercent, barIdx) => (
+                                <div
+                                  key={`wave-${idx}-${barIdx}`}
+                                  className={`flex-1 rounded-full transition-all duration-150 ${
+                                    isThisPlaying
+                                      ? 'bg-purple-500'
+                                      : isDark
+                                      ? 'bg-neutral-700'
+                                      : 'bg-purple-300'
+                                  }`}
+                                  style={{
+                                    height: isThisPlaying
+                                      ? `${Math.max(
+                                          25,
+                                          Math.min(
+                                            100,
+                                            hPercent *
+                                              (0.35 +
+                                                Math.abs(Math.sin(barIdx * 0.8 + playbackTime * 4)) * 0.7)
+                                          )
+                                        )}%`
+                                      : `${Math.max(25, hPercent * 0.45)}%`,
+                                  }}
+                                />
+                              )
+                            )}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveVoiceNote(vn.id)}
+                          className="p-1.5 rounded-full text-neutral-400 hover:text-red-400 transition-colors cursor-pointer"
+                          title="Delete voice note"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-              {/* Note Text Content (Only show if note has text content, or if note has no media at all) */}
-              {(note.content?.trim() || (allVoiceNotes.length === 0 && allImages.length === 0)) && (
+              {/* Main Journal Writing Canvas with Auto-Markdown */}
+              <div className="relative flex-1 min-h-[280px] flex flex-col pt-1">
+                {isEditorEmpty && (
+                  <div
+                    onClick={() => editorRef.current?.focus()}
+                    className={`absolute inset-0 pointer-events-none text-base sm:text-lg leading-relaxed font-normal select-none ${
+                      isDark ? 'text-neutral-600' : 'text-neutral-400'
+                    }`}
+                  >
+                    Dear Diary, write your thoughts, memories, reflections, or moments here...
+                  </div>
+                )}
                 <div
-                  className={`p-3.5 sm:p-4 rounded-2xl transition-colors ${
-                    isDark ? 'bg-[#181818]' : 'bg-neutral-100/80'
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleEditorInput}
+                  onPaste={handleEditorPaste}
+                  onKeyDown={handleEditorKeyDown}
+                  onSelect={updateActiveFormats}
+                  onKeyUp={updateActiveFormats}
+                  onMouseUp={updateActiveFormats}
+                  className={`w-full flex-1 bg-transparent border-none outline-hidden resize-none text-base sm:text-lg leading-relaxed font-normal transition-colors focus:outline-none min-h-[260px] ${
+                    isDark ? 'text-neutral-200' : 'text-neutral-800'
                   }`}
-                >
-                  {note.content?.trim() && (
-                    <div className="flex items-center justify-end mb-2">
-                      <button
-                        id="diary-card-copy-btn"
-                        type="button"
-                        onClick={handleCopy}
-                        className={`h-6 w-6 sm:w-auto px-0 sm:px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
-                          copied
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : isDark
-                            ? 'bg-[#262626] hover:bg-[#303030] text-neutral-300'
-                            : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
-                        }`}
-                        title={copied ? 'Copied' : 'Copy'}
-                      >
-                        {copied ? (
-                          <>
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            <span className="hidden sm:inline">Copied</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3" />
-                            <span className="hidden sm:inline">Copy</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                  {note.content?.trim() ? (
-                    <div
-                      className={`leading-relaxed text-sm ${
-                        isDark ? 'text-neutral-200' : 'text-neutral-800'
-                      }`}
-                    >
-                      {note.content.split('\n').map((line, lIdx) => {
-                        const match = line.match(/^(\s*[-*•]?\s*\[)( |x|X)(\]\s*)(.*)$/);
-                        if (match) {
-                          const isCompleted = match[2].toLowerCase() === 'x';
-                          const taskText = match[4];
-                          return (
-                            <div
-                              key={`diary-task-${lIdx}`}
-                              className="flex items-start gap-2.5 my-1 text-sm group cursor-pointer"
-                              onClick={() => handleToggleContentCheckbox(lIdx)}
-                            >
-                              <button
-                                type="button"
-                                className={`w-4 h-4 mt-0.5 rounded-md flex items-center justify-center shrink-0 transition-colors ${
-                                  isCompleted
-                                    ? isDark
-                                      ? 'bg-emerald-500 text-white'
-                                      : 'bg-emerald-600 text-white'
-                                    : isDark
-                                    ? 'bg-[#262626] border border-neutral-700 hover:border-neutral-500'
-                                    : 'bg-neutral-200 border border-neutral-300 hover:border-neutral-400'
-                                }`}
-                              >
-                                {isCompleted && <Check className="w-3 h-3 stroke-[3]" />}
-                              </button>
-                              <span
-                                className={`flex-1 break-words ${
-                                  isCompleted
-                                    ? 'line-through text-neutral-500'
-                                    : isDark
-                                    ? 'text-neutral-200'
-                                    : 'text-neutral-800'
-                                }`}
-                              >
-                                {taskText}
-                              </span>
-                            </div>
-                          );
-                        }
-                        if (!line.trim()) {
-                          return <div key={`diary-spacer-${lIdx}`} className="h-2" />;
-                        }
-                        return (
-                          <p key={`diary-p-${lIdx}`} className="whitespace-pre-wrap leading-relaxed">
-                            {line}
-                          </p>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-xs text-neutral-500 italic">
-                      No content written in this note.
-                    </div>
+                  style={{ minHeight: '260px' }}
+                />
+              </div>
+            </div>
+
+            {/* BOTTOM FORMATTING BAR */}
+            <footer className="bg-inherit pt-2 pb-1 shrink-0 z-20">
+              <div className="w-full flex items-center justify-between text-xs text-neutral-400">
+                {/* Quick Format Tools with Active Toggle Highlight */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleToggleFormatting('bold');
+                    }}
+                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                      activeFormats.bold
+                        ? isDark
+                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
+                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
+                        : isDark
+                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
+                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                    }`}
+                    title="Bold (**text**)"
+                  >
+                    <Bold className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleToggleFormatting('italic');
+                    }}
+                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                      activeFormats.italic
+                        ? isDark
+                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
+                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
+                        : isDark
+                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
+                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                    }`}
+                    title="Italic (*text*)"
+                  >
+                    <Italic className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleToggleFormatting('list');
+                    }}
+                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                      activeFormats.list
+                        ? isDark
+                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
+                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
+                        : isDark
+                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
+                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                    }`}
+                    title="Bullet List (- item)"
+                  >
+                    <List className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleToggleFormatting('quote');
+                    }}
+                    className={`p-1.5 sm:p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                      activeFormats.quote
+                        ? isDark
+                          ? 'bg-neutral-800 text-white ring-1 ring-neutral-700 shadow-xs'
+                          : 'bg-neutral-200 text-neutral-900 ring-1 ring-neutral-300 shadow-xs'
+                        : isDark
+                        ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white'
+                        : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                    }`}
+                    title="Quote (> quote)"
+                  >
+                    <Quote className="w-4 h-4 stroke-[2.5]" />
+                  </button>
+                </div>
+
+                {/* Right side: Clean Word count */}
+                <div className="flex items-center gap-2 text-[11px] text-neutral-400 font-medium">
+                  {wordCount > 0 && (
+                    <span>{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
                   )}
                 </div>
+              </div>
+            </footer>
+
+            {/* Reflection Prompts Modal */}
+            <AnimatePresence>
+              {isPromptsOpen && (
+                <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsPromptsOpen(false)}
+                    className="absolute inset-0 bg-black/60 backdrop-blur-xs cursor-pointer"
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                    className={`relative w-full max-w-sm rounded-2xl border shadow-2xl p-4 z-10 ${
+                      isDark
+                        ? 'bg-[#18181b] border-neutral-800 text-white'
+                        : 'bg-white border-neutral-200 text-neutral-900'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <h3 className="text-sm font-bold tracking-tight">Journaling Prompts</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsPromptsOpen(false)}
+                        className="p-1 rounded-full text-neutral-400 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto no-scrollbar">
+                      {JOURNALING_PROMPTS.map((pr, idx) => (
+                        <button
+                          key={`prompt-modal-${idx}`}
+                          type="button"
+                          onClick={() => handleInsertPrompt(pr)}
+                          className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-colors leading-relaxed cursor-pointer ${
+                            isDark
+                              ? 'hover:bg-neutral-800/90 text-neutral-200 hover:text-white bg-neutral-900/50'
+                              : 'hover:bg-neutral-100 text-neutral-800 bg-neutral-50'
+                          }`}
+                        >
+                          "{pr}"
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                </div>
               )}
-            </div>
+            </AnimatePresence>
+
+            {/* Image Lightbox */}
+            <ImageLightbox
+              isOpen={!!lightboxSrc}
+              src={lightboxSrc}
+              alt="Diary memory"
+              onClose={() => setLightboxSrc(null)}
+            />
           </motion.div>
         </div>
       )}
-
-      {/* Fullscreen Image Lightbox */}
-      <ImageLightbox
-        isOpen={!!lightboxImg}
-        src={lightboxImg}
-        onClose={() => setLightboxImg(null)}
-      />
     </AnimatePresence>
   );
 }
