@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { ThemeMode, NoteItem, VoiceNoteAttachment } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
-import { formatDiaryHeaderDate, stripHtml, parseNoteDateToISO, formatDateToISO } from '../lib/formatters';
+import { formatDiaryHeaderDate, stripHtml, parseNoteDateToISO, formatDateToISO, SHORT_MONTHS } from '../lib/formatters';
 import { ImageLightbox } from './ImageLightbox';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
@@ -370,7 +370,7 @@ export function DiaryDrawer({
   // Format header date strictly as e.g. "7 Sept 2026"
   const headerDateString = formatDiaryHeaderDate(currentDate);
 
-  // Date breakdown matching reference screenshot: Day number (28), Day of week (Fri), Year.Month (2026.8)
+  // Date breakdown matching editorial header: Day number (4), Day of week (FRI), Month & Year (Sept 2026)
   const parsedDate = useMemo(() => {
     try {
       const iso = parseNoteDateToISO(currentDate);
@@ -378,14 +378,16 @@ export function DiaryDrawer({
       const dt = new Date(y, m - 1, d);
       const dayNum = d;
       const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
-      const yearMonth = `${dt.getFullYear()}.${dt.getMonth() + 1}`;
+      const monthName = SHORT_MONTHS[dt.getMonth()] || 'Sept';
+      const yearMonth = `${monthName} ${dt.getFullYear()}`;
       return { dayNum, weekday, yearMonth };
     } catch {
       const dt = new Date();
+      const monthName = SHORT_MONTHS[dt.getMonth()] || 'Sept';
       return {
         dayNum: dt.getDate(),
         weekday: dt.toLocaleDateString('en-US', { weekday: 'short' }),
-        yearMonth: `${dt.getFullYear()}.${dt.getMonth() + 1}`,
+        yearMonth: `${monthName} ${dt.getFullYear()}`,
       };
     }
   }, [currentDate]);
@@ -1142,7 +1144,7 @@ export function DiaryDrawer({
                       <span className="text-[11px] sm:text-xs font-bold text-neutral-600 dark:text-neutral-400 uppercase tracking-wider">
                         {parsedDate.weekday}
                       </span>
-                      <span className="text-[11px] sm:text-xs font-medium text-neutral-400 dark:text-neutral-500 font-mono">
+                      <span className="text-[11px] sm:text-xs font-medium text-neutral-400 dark:text-neutral-500 whitespace-nowrap">
                         {parsedDate.yearMonth}
                       </span>
                     </div>

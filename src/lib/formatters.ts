@@ -30,14 +30,15 @@ export function formatDiaryHeaderDate(dateInput?: string | Date): string {
   }
 
   const day = d.getDate();
-  const months = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
-  ];
-  const month = months[d.getMonth()];
+  const month = SHORT_MONTHS[d.getMonth()];
   const year = d.getFullYear();
   return `${day} ${month} ${year}`;
 }
+
+export const SHORT_MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'
+];
 
 export function formatDateToISO(d: Date): string {
   const year = d.getFullYear();
