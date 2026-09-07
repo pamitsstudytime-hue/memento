@@ -33,6 +33,7 @@ import { triggerHaptic } from '../lib/capacitor';
 import { DiaryDrawer } from './DiaryDrawer';
 import { DiaryDayDrawer } from './DiaryDayDrawer';
 import { ImageLightbox } from './ImageLightbox';
+import { formatDiaryHeaderDate, stripHtml } from '../lib/formatters';
 
 export type DiaryTab = 'inbox' | 'calendar' | 'moments';
 
@@ -1040,8 +1041,10 @@ export function DiaryPage({
                     const hasPhotos = (item.images && item.images.length > 0) || !!item.imageUrl;
                     const imagesList = item.images || (item.imageUrl ? [item.imageUrl] : []);
                     const hasVoice = (item.voiceNotes && item.voiceNotes.length > 0) || !!item.hasVoiceNote;
-                    const wordCount = (item.content || '').trim().split(/\s+/).filter(Boolean).length;
+                    const plainText = stripHtml(item.content);
+                    const wordCount = plainText.split(/\s+/).filter(Boolean).length;
                     const readingTime = Math.max(1, Math.ceil(wordCount / 180));
+                    const formattedCardDate = formatDiaryHeaderDate(noteISO);
 
                     return (
                       <motion.article
@@ -1049,31 +1052,46 @@ export function DiaryPage({
                         layout
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className={`group relative rounded-2xl p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+                        className={`group relative rounded-2xl p-4.5 sm:p-5 border transition-all duration-200 cursor-pointer ${
                           isDark
-                            ? 'bg-[#121214] hover:bg-[#18181c] border-neutral-800/80 hover:border-neutral-700/80 shadow-xs'
-                            : 'bg-white hover:bg-[#fafafa] border-neutral-200/90 hover:border-neutral-300 shadow-xs'
+                            ? 'bg-[#121215] hover:bg-[#18181e] border-neutral-800/90 hover:border-purple-500/35 shadow-xs hover:shadow-lg hover:shadow-purple-500/5'
+                            : 'bg-white hover:bg-[#fafafa] border-neutral-200/90 hover:border-purple-300/80 shadow-xs hover:shadow-md hover:shadow-purple-500/5'
                         }`}
                         onClick={() => {
                           triggerHaptic('light');
                           setReadingNote(item);
                         }}
                       >
-                        {/* Entry Header: Date & Bookmark & More Menu */}
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <span
-                            className={`text-[11px] font-semibold tracking-wide px-2.5 py-0.5 rounded-full ${
-                              friendlyDate === 'Today'
-                                ? isDark
-                                  ? 'bg-purple-500/20 text-purple-300'
-                                  : 'bg-purple-100 text-purple-800'
-                                : isDark
-                                ? 'bg-neutral-800 text-neutral-300'
-                                : 'bg-neutral-100 text-neutral-700'
-                            }`}
-                          >
-                            {friendlyDate}
-                          </span>
+                        {/* Entry Header: Date, Mood & Actions */}
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`text-[11px] font-semibold tracking-wide px-2.5 py-1 rounded-full flex items-center gap-1.5 ${
+                                friendlyDate === 'Today'
+                                  ? isDark
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                    : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : isDark
+                                  ? 'bg-[#1a1a20] text-neutral-300 border border-neutral-800/80'
+                                  : 'bg-neutral-100 text-neutral-700 border border-neutral-200'
+                              }`}
+                            >
+                              <CalendarIcon className="w-3 h-3 text-purple-400 stroke-[2.2]" />
+                              <span>{friendlyDate === 'Today' ? `Today • ${formattedCardDate}` : formattedCardDate}</span>
+                            </span>
+
+                            {item.mood && (
+                              <span
+                                className={`text-xs px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1 ${
+                                  isDark
+                                    ? 'bg-purple-500/15 text-purple-300 border border-purple-500/25'
+                                    : 'bg-purple-50 text-purple-700 border border-purple-200'
+                                }`}
+                              >
+                                <span>{item.mood}</span>
+                              </span>
+                            )}
+                          </div>
 
                           <div className="flex items-center gap-1 relative" onClick={(e) => e.stopPropagation()}>
                             {/* Favorite bookmark */}
@@ -1085,7 +1103,7 @@ export function DiaryPage({
                                   onToggleFavorite(item.id);
                                 }}
                                 aria-label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                                className={`p-1.5 rounded-full transition-colors ${
+                                className={`p-1.5 rounded-full transition-colors cursor-pointer ${
                                   item.isFavorite
                                     ? isDark
                                       ? 'text-purple-400'
@@ -1111,7 +1129,7 @@ export function DiaryPage({
                                   setOpenCardMenuId((prev) => (prev === item.id ? null : item.id));
                                 }}
                                 aria-label="More actions"
-                                className={`p-1.5 rounded-full transition-colors ${
+                                className={`p-1.5 rounded-full transition-colors cursor-pointer ${
                                   openCardMenuId === item.id
                                     ? isDark
                                       ? 'bg-neutral-800 text-white'
@@ -1132,28 +1150,26 @@ export function DiaryPage({
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     exit={{ opacity: 0, scale: 0.95, y: -2 }}
                                     transition={{ duration: 0.12 }}
-                                    className={`absolute right-0 top-full mt-1 w-36 rounded-xl border shadow-xl p-1 z-30 ${
+                                    className={`absolute right-0 top-full mt-1 w-40 rounded-xl border shadow-xl p-1 z-30 ${
                                       isDark
                                         ? 'bg-[#18181b] border-neutral-700 text-white shadow-black/60'
                                         : 'bg-white border-neutral-200 text-neutral-900 shadow-neutral-300/40'
                                     }`}
                                   >
-                                    {onSelectNote && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setOpenCardMenuId(null);
-                                          triggerHaptic('light');
-                                          onSelectNote(item);
-                                        }}
-                                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                                          isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
-                                        }`}
-                                      >
-                                        <Pencil className="w-3.5 h-3.5" />
-                                        <span>Edit</span>
-                                      </button>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenCardMenuId(null);
+                                        triggerHaptic('light');
+                                        setReadingNote(item);
+                                      }}
+                                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                                        isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                                      }`}
+                                    >
+                                      <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                                      <span>Open Journal</span>
+                                    </button>
 
                                     <button
                                       type="button"
@@ -1161,10 +1177,10 @@ export function DiaryPage({
                                         setOpenCardMenuId(null);
                                         triggerHaptic('light');
                                         if (item.content) {
-                                          navigator.clipboard?.writeText(item.content);
+                                          navigator.clipboard?.writeText(stripHtml(item.content));
                                         }
                                       }}
-                                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                                         isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
                                       }`}
                                     >
@@ -1180,7 +1196,7 @@ export function DiaryPage({
                                           triggerHaptic('medium');
                                           onDeleteNote(item.id);
                                         }}
-                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-red-500 hover:bg-red-500/10"
+                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-red-500 hover:bg-red-500/10 cursor-pointer"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
                                         <span>Delete</span>
@@ -1194,26 +1210,26 @@ export function DiaryPage({
                         </div>
 
                         {/* Title */}
-                        {item.title && (
-                          <h3
-                            className={`text-base sm:text-lg font-bold tracking-tight mb-1.5 leading-snug ${
-                              isDark ? 'text-white' : 'text-neutral-900'
-                            }`}
-                          >
-                            {item.title}
-                          </h3>
-                        )}
+                        <h3
+                          className={`text-base sm:text-lg font-bold tracking-tight mb-1.5 leading-snug group-hover:text-purple-400 dark:group-hover:text-purple-300 transition-colors ${
+                            isDark ? 'text-white' : 'text-neutral-900'
+                          }`}
+                        >
+                          {item.title || 'Untitled Reflection'}
+                        </h3>
 
                         {/* Content Excerpt */}
-                        {item.content && (
-                          <p
-                            className={`text-xs sm:text-sm line-clamp-3 leading-relaxed font-normal mb-3 ${
-                              isDark ? 'text-neutral-300' : 'text-neutral-700'
-                            }`}
-                          >
-                            {item.content}
-                          </p>
-                        )}
+                        <p
+                          className={`text-xs sm:text-sm line-clamp-3 leading-relaxed font-normal mb-3 ${
+                            isDark ? 'text-neutral-300' : 'text-neutral-700'
+                          }`}
+                        >
+                          {stripHtml(item.content) || (
+                            <span className="italic text-neutral-500 dark:text-neutral-500">
+                              No written thoughts yet. Tap to open journal...
+                            </span>
+                          )}
+                        </p>
 
                         {/* Photo Previews Strip */}
                         {hasPhotos && (
@@ -1261,7 +1277,7 @@ export function DiaryPage({
                                 const voiceUrl = item.voiceNotes?.[0]?.audioUrl || item.voiceAudioUrl;
                                 handlePlayVoice(`inbox-${item.id}`, voiceUrl);
                               }}
-                              className={`h-7 px-2.5 rounded-full flex items-center gap-1.5 text-[11px] font-medium transition-all ${
+                              className={`h-7 px-2.5 rounded-full flex items-center gap-1.5 text-[11px] font-medium transition-all cursor-pointer ${
                                 activePlayingId === `inbox-${item.id}`
                                   ? 'bg-purple-500 text-white'
                                   : isDark
@@ -1281,25 +1297,32 @@ export function DiaryPage({
                           </div>
                         )}
 
-                        {/* Footer Meta: reading time & tags */}
-                        <div className="flex items-center justify-between text-[11px] text-neutral-400 mt-1">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 stroke-[2]" />
+                        {/* Footer Meta: reading time, word count & tags */}
+                        <div className="flex items-center justify-between text-[11px] text-neutral-400 mt-2 pt-2 border-t border-neutral-800/40 dark:border-neutral-800/50">
+                          <span className="flex items-center gap-1.5">
+                            <Clock className="w-3 h-3 text-purple-400 stroke-[2]" />
                             <span>{readingTime} min read</span>
+                            <span>•</span>
+                            <span>{wordCount} words</span>
                           </span>
 
-                          {item.tags && item.tags.length > 0 && (
-                            <div className="flex items-center gap-1 overflow-hidden">
-                              {item.tags.slice(0, 2).map((t, idx) => (
-                                <span
-                                  key={`diary-tag-${item.id}-${t}-${idx}`}
-                                  className="text-[10px] px-1.5 py-0.5 rounded-md bg-neutral-500/10 text-neutral-500 font-mono"
-                                >
-                                  #{t}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {item.tags && item.tags.length > 0 && (
+                              <div className="flex items-center gap-1 overflow-hidden">
+                                {item.tags.slice(0, 2).map((t, idx) => (
+                                  <span
+                                    key={`diary-tag-${item.id}-${t}-${idx}`}
+                                    className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 font-mono"
+                                  >
+                                    #{t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <span className="text-[11px] font-medium text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+                              Open →
+                            </span>
+                          </div>
                         </div>
                       </motion.article>
                     );
@@ -1798,7 +1821,7 @@ export function DiaryPage({
                                 isDark ? 'text-neutral-200' : 'text-neutral-800'
                               }`}
                             >
-                              "{item.content}"
+                              "{stripHtml(item.content)}"
                             </p>
                             {item.title && (
                               <p className="text-[11px] text-neutral-400 mt-2 font-medium">

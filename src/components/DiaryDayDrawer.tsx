@@ -15,6 +15,7 @@ import {
 import { ThemeMode, NoteItem } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { triggerHaptic } from '../lib/capacitor';
+import { stripHtml } from '../lib/formatters';
 
 interface DiaryDayDrawerProps {
   isOpen: boolean;
@@ -77,13 +78,13 @@ export const DiaryDayDrawer: React.FC<DiaryDayDrawerProps> = ({
   const isDark = theme === 'dark';
   const isDesktop = useIsDesktop();
 
-  if (!isOpen || !dateStr) return null;
-
-  const { title, fullDate, isToday } = getFormattedDayHeader(dateStr, todayStr);
+  const { title, fullDate, isToday } = dateStr
+    ? getFormattedDayHeader(dateStr, todayStr)
+    : { title: '', fullDate: '', isToday: false };
 
   return (
     <AnimatePresence>
-      {isOpen && (
+      {isOpen && dateStr && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
           {/* Backdrop matching default app theme */}
           <motion.div
@@ -228,7 +229,8 @@ export const DiaryDayDrawer: React.FC<DiaryDayDrawerProps> = ({
                 entries.map((item) => {
                   const hasPhotos = (item.images && item.images.length > 0) || !!item.imageUrl;
                   const hasVoice = (item.voiceNotes && item.voiceNotes.length > 0) || !!item.hasVoiceNote;
-                  const wordCount = (item.content || '').trim().split(/\s+/).filter(Boolean).length;
+                  const plainText = stripHtml(item.content);
+                  const wordCount = plainText.split(/\s+/).filter(Boolean).length;
                   const readingTime = Math.max(1, Math.ceil(wordCount / 180));
 
                   return (
@@ -306,7 +308,7 @@ export const DiaryDayDrawer: React.FC<DiaryDayDrawerProps> = ({
 
                       {item.content && (
                         <p className="text-xs text-neutral-400 dark:text-neutral-400 line-clamp-2 leading-relaxed mb-2.5">
-                          {item.content}
+                          {stripHtml(item.content)}
                         </p>
                       )}
 

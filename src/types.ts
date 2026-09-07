@@ -91,6 +91,7 @@ export interface NoteItem {
   voiceNotes?: VoiceNoteAttachment[];
   imageUrl?: string;
   images?: string[];
+  mood?: string;
   documents?: DocumentAttachment[];
   personalInfo?: PersonalInfoField[];
 }
