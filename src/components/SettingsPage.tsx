@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   X,
   Search,
   Keyboard,
+  FileText,
 } from 'lucide-react';
 import { ThemeMode } from '../types';
 import { NoteItem } from './EmptyBody';
@@ -29,6 +30,7 @@ interface SettingsPageProps {
   autoOpenKeyboard?: boolean;
   onBack: () => void;
   onOpenSearch?: () => void;
+  onSelectNote?: (note: NoteItem) => void;
   onToggleTheme: () => void;
   onToggleNavbarFloating?: () => void;
   onToggleAutoOpenKeyboard?: () => void;
@@ -43,6 +45,7 @@ export function SettingsPage({
   autoOpenKeyboard = true,
   onBack,
   onOpenSearch,
+  onSelectNote,
   onToggleTheme,
   onToggleNavbarFloating,
   onToggleAutoOpenKeyboard,
@@ -54,6 +57,7 @@ export function SettingsPage({
   const [activeModal, setActiveModal] = useState<'none' | 'data' | 'info'>('none');
   const [isAppearanceDrawerOpen, setIsAppearanceDrawerOpen] = useState(false);
   const [copiedNotification, setCopiedNotification] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; build: string }>({
     name: 'Memento',
     version: '1.0.0',
@@ -63,6 +67,46 @@ export function SettingsPage({
   useEffect(() => {
     getAppVersion().then(setAppInfo).catch(() => {});
   }, []);
+
+  const query = searchQuery.trim().toLowerCase();
+
+  const matchesAppearance =
+    !query ||
+    'appearance customization theme navigation layout dark light mode floating'.includes(query);
+
+  const matchesKeyboard =
+    !query ||
+    'auto open keyboard soft typing input focus'.includes(query);
+
+  const matchesData =
+    !query ||
+    'data storage management backup export import clear reset json delete'.includes(query);
+
+  const matchesInfo =
+    !query ||
+    'app info memento version build about offline notebook'.includes(query);
+
+  const matchingNotes = useMemo(() => {
+    if (!query) return [];
+    return notes
+      .filter((n) => !n.isArchived)
+      .filter(
+        (n) =>
+          n.title.toLowerCase().includes(query) ||
+          n.content.toLowerCase().includes(query) ||
+          (n.email && n.email.toLowerCase().includes(query)) ||
+          (n.service && n.service.toLowerCase().includes(query))
+      )
+      .slice(0, 8);
+  }, [notes, query]);
+
+  const hasAnyMatch =
+    !query ||
+    matchesAppearance ||
+    matchesKeyboard ||
+    matchesData ||
+    matchesInfo ||
+    matchingNotes.length > 0;
 
   const handleExportData = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(notes, null, 2));
@@ -87,282 +131,430 @@ export function SettingsPage({
         isDark ? 'bg-[#0a0a0a] text-white' : 'bg-[#f4f4f6] text-neutral-900'
       }`}
     >
-      {/* Top Bar with Back Button */}
-      <header className="px-3 md:px-6 pt-[max(calc(var(--safe-top,0px)+0.75rem),1.25rem)] md:pt-6 pb-3 flex items-center justify-between z-10 shrink-0 max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto w-full">
-        <div className="flex items-center gap-2">
+      {/* Top Bar with Back Button, Desktop Search Bar, and Mobile Search Button */}
+      <header className="px-5 md:px-8 pt-[max(calc(var(--safe-top,0px)+0.75rem),1.25rem)] md:pt-6 pb-2.5 flex items-center justify-between z-10 shrink-0 max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto w-full">
+        <div className="flex items-center gap-3">
           <button
             id="settings-back-btn"
             type="button"
             onClick={onBack}
             aria-label="Back"
-            className={`w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+            className={`w-10 h-10 rounded-full flex items-center justify-center active:scale-90 transition-all cursor-pointer ${
               isDark
                 ? 'bg-[#181818] text-neutral-300 hover:text-white hover:bg-[#222222]'
-                : 'bg-white text-neutral-700 hover:text-neutral-900 hover:bg-[#eceef2] shadow-sm'
+                : 'bg-[#ebecef] text-neutral-700 hover:text-neutral-900 hover:bg-[#e2e3e7]'
             }`}
           >
             <ArrowLeft className="w-5 h-5 stroke-[2]" />
           </button>
-          <h2 className="text-xl font-bold tracking-tight">Settings</h2>
+          <h2 className="text-xl font-bold tracking-tight select-none">Settings</h2>
         </div>
 
-        {onOpenSearch && (
-          <button
-            type="button"
-            onClick={onOpenSearch}
-            aria-label="Search"
-            className={`md:hidden w-9 h-9 rounded-full flex items-center justify-center active:scale-90 transition-all ${
+        {/* Center: Desktop Flexible Search Bar (Same kind as TopBar) */}
+        <div className="hidden md:flex flex-1 justify-center max-w-sm lg:max-w-md xl:max-w-lg mx-4">
+          <div
+            className={`flex items-center gap-2.5 px-4 h-10 lg:h-11 rounded-full w-full transition-all duration-200 group border shadow-xs ${
               isDark
-                ? 'bg-[#181818] text-neutral-300 hover:text-white hover:bg-[#222222]'
-                : 'bg-white text-neutral-700 hover:text-neutral-900 hover:bg-[#eceef2] shadow-sm'
+                ? 'bg-[#151515] hover:bg-[#1a1a1a] border-neutral-800/80 focus-within:border-neutral-600 focus-within:bg-[#181818] focus-within:ring-2 focus-within:ring-white/5'
+                : 'bg-[#eeeff2] hover:bg-[#e6e8ed] border-neutral-200/70 focus-within:border-neutral-400 focus-within:bg-white focus-within:ring-2 focus-within:ring-black/5'
             }`}
-            title="Search notes and tasks"
           >
-            <Search className="w-4.5 h-4.5" />
-          </button>
-        )}
+            <Search
+              className={`w-4.5 h-4.5 shrink-0 transition-colors ${
+                isDark
+                  ? 'text-neutral-500 group-focus-within:text-neutral-200'
+                  : 'text-neutral-400 group-focus-within:text-neutral-800'
+              }`}
+              strokeWidth={2}
+            />
+            <input
+              id="settings-search-input"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search settings, preferences, or notes..."
+              className={`w-full bg-transparent text-sm font-normal outline-none transition-colors ${
+                isDark
+                  ? 'text-white placeholder-neutral-500'
+                  : 'text-neutral-900 placeholder-neutral-400'
+              }`}
+            />
+
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className={`p-1 rounded-full hover:opacity-80 transition-opacity shrink-0 cursor-pointer ${
+                  isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-500 hover:text-black'
+                }`}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Right side: On mobile view show only search btn at top right like other pages */}
+        <div className="flex items-center gap-2">
+          {onOpenSearch && (
+            <button
+              id="settings-mobile-search-btn"
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                onOpenSearch();
+              }}
+              aria-label="Open search menu"
+              className={`md:hidden w-10 h-10 rounded-full flex items-center justify-center active:scale-95 transition-all cursor-pointer ${
+                isDark
+                  ? 'text-neutral-300 hover:text-white bg-[#181818] hover:bg-[#222222]'
+                  : 'text-neutral-700 hover:text-neutral-900 bg-[#ebecef] hover:bg-[#e2e3e7]'
+              }`}
+            >
+              <Search className="w-5 h-5 stroke-[2]" />
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Main Settings Content List */}
-      <main className="flex-1 min-h-0 max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto w-full px-5 md:px-8 pt-2 md:pt-6 pb-28 md:pb-10 overflow-y-auto overscroll-contain no-scrollbar space-y-6">
+      <main className="flex-1 min-h-0 max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto w-full px-5 md:px-8 pt-2 md:pt-4 pb-28 md:pb-10 overflow-y-auto overscroll-contain no-scrollbar space-y-6">
+        {/* MATCHING NOTES (When search query is entered) */}
+        {matchingNotes.length > 0 && (
+          <section className="space-y-2.5">
+            <div
+              className={`text-[11px] font-bold tracking-wider uppercase px-1 flex items-center justify-between ${
+                isDark ? 'text-neutral-400' : 'text-neutral-600'
+              }`}
+            >
+              <span>Matching Notes ({matchingNotes.length})</span>
+              {onOpenSearch && (
+                <button
+                  type="button"
+                  onClick={onOpenSearch}
+                  className="text-[11px] text-emerald-500 hover:underline lowercase font-medium"
+                >
+                  view all in search drawer
+                </button>
+              )}
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              {matchingNotes.map((note) => (
+                <div
+                  key={`settings-search-note-${note.id}`}
+                  onClick={() => {
+                    triggerHaptic('light');
+                    if (onSelectNote) {
+                      onSelectNote(note);
+                    } else if (onOpenSearch) {
+                      onOpenSearch();
+                    }
+                  }}
+                  className={`p-3 rounded-xl border flex items-start gap-2.5 cursor-pointer active:scale-[0.98] transition-all ${
+                    isDark
+                      ? 'bg-[#141416] hover:bg-[#1a1a1d] border-neutral-800 text-neutral-200'
+                      : 'bg-white hover:bg-neutral-50 border-neutral-200 text-neutral-800 shadow-xs'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-xs font-semibold truncate">
+                      {note.title || 'Untitled Note'}
+                    </h4>
+                    {note.content && (
+                      <p className="text-[11px] text-neutral-500 truncate mt-0.5">
+                        {note.content}
+                      </p>
+                    )}
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Empty search results state */}
+        {!hasAnyMatch && (
+          <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                isDark ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-200 text-neutral-600'
+              }`}
+            >
+              <Search className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">No results found for &ldquo;{searchQuery}&rdquo;</p>
+              <p className="text-xs text-neutral-500 mt-1">
+                Try searching for &ldquo;theme&rdquo;, &ldquo;keyboard&rdquo;, &ldquo;data&rdquo;, or note titles.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                isDark
+                  ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                  : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
+              }`}
+            >
+              Clear Search
+            </button>
+          </div>
+        )}
+
         {/* SECTION 1: APPEARANCE */}
-        <section className="space-y-3">
-          <div
-            className={`text-[11px] font-bold tracking-wider uppercase px-1 ${
-              isDark ? 'text-neutral-500' : 'text-neutral-500'
-            }`}
-          >
-            GENERAL & CUSTOMIZATION
-          </div>
+        {(matchesAppearance || matchesKeyboard) && (
+          <section className="space-y-3">
+            <div
+              className={`text-[11px] font-bold tracking-wider uppercase px-1 ${
+                isDark ? 'text-neutral-500' : 'text-neutral-500'
+              }`}
+            >
+              GENERAL & CUSTOMIZATION
+            </div>
 
-          {/* Theme Option */}
-          <div
-            id="setting-appearance-card"
-            onClick={() => {
-              triggerHaptic('selection');
-              setIsAppearanceDrawerOpen(true);
-            }}
-            role="button"
-            tabIndex={0}
-            className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
-              isDark
-                ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
-                : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
-            }`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0 pr-2">
+            {/* Theme Option */}
+            {matchesAppearance && (
               <div
-                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                  isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
+                id="setting-appearance-card"
+                onClick={() => {
+                  triggerHaptic('selection');
+                  setIsAppearanceDrawerOpen(true);
+                }}
+                role="button"
+                tabIndex={0}
+                className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
+                  isDark
+                    ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
+                    : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
                 }`}
               >
-                <Palette className="w-5 h-5 stroke-[1.8]" />
-              </div>
+                <div className="flex items-center gap-3.5 min-w-0 pr-2">
+                  <div
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                      isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
+                    }`}
+                  >
+                    <Palette className="w-5 h-5 stroke-[1.8]" />
+                  </div>
 
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
-                  Appearance & Customization
-                </h3>
-                <p
-                  className={`text-xs truncate ${
-                    isDark ? 'text-neutral-400' : 'text-neutral-500'
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
+                      Appearance & Customization
+                    </h3>
+                    <p
+                      className={`text-xs truncate ${
+                        isDark ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}
+                    >
+                      Theme & navigation layout
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <ChevronRight
+                    className={`w-4 h-4 ${
+                      isDark ? 'text-neutral-500' : 'text-neutral-400'
+                    }`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Auto Open Keyboard Card */}
+            {matchesKeyboard && (
+              <div
+                id="setting-auto-open-keyboard-card"
+                onClick={() => {
+                  triggerHaptic('selection');
+                  onToggleAutoOpenKeyboard?.();
+                }}
+                role="button"
+                tabIndex={0}
+                className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
+                  isDark
+                    ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
+                    : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
+                }`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0 pr-2">
+                  <div
+                    className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                      isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
+                    }`}
+                  >
+                    <Keyboard className="w-5 h-5 stroke-[1.8]" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
+                      Auto Open Keyboard
+                    </h3>
+                    <p
+                      className={`text-xs truncate ${
+                        isDark ? 'text-neutral-400' : 'text-neutral-500'
+                      }`}
+                    >
+                      Auto-open soft keyboard when focusing inputs & search
+                    </p>
+                  </div>
+                </div>
+
+                {/* Toggle switch with fluid spring animation matching the user screenshot */}
+                <div className="shrink-0 flex items-center">
+                  <div
+                    role="switch"
+                    aria-checked={autoOpenKeyboard}
+                    className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out ${
+                      autoOpenKeyboard
+                        ? isDark
+                          ? 'bg-[#52525b]'
+                          : 'bg-neutral-800'
+                        : isDark
+                        ? 'bg-[#27272a]'
+                        : 'bg-neutral-300'
+                    }`}
+                  >
+                    <motion.span
+                      layout
+                      transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+                      className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow-sm ring-0 ${
+                        autoOpenKeyboard ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* SECTION 2: DATA & STORAGE */}
+        {matchesData && (
+          <section>
+            <div
+              className={`text-[11px] font-bold tracking-wider uppercase mb-2.5 px-1 ${
+                isDark ? 'text-neutral-500' : 'text-neutral-500'
+              }`}
+            >
+              DATA & STORAGE
+            </div>
+
+            <div
+              id="setting-data-card"
+              onClick={() => setActiveModal('data')}
+              role="button"
+              tabIndex={0}
+              className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
+                isDark
+                  ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
+                  : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
+              }`}
+            >
+              <div className="flex items-center gap-3.5 min-w-0 pr-2">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                    isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
                   }`}
                 >
-                  Theme & navigation layout
-                </p>
-              </div>
-            </div>
+                  <Database className="w-5 h-5 stroke-[1.8]" />
+                </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <ChevronRight
-                className={`w-4 h-4 ${
-                  isDark ? 'text-neutral-500' : 'text-neutral-400'
-                }`}
-              />
-            </div>
-          </div>
-
-          {/* Auto Open Keyboard Card */}
-          <div
-            id="setting-auto-open-keyboard-card"
-            onClick={() => {
-              triggerHaptic('selection');
-              onToggleAutoOpenKeyboard?.();
-            }}
-            role="button"
-            tabIndex={0}
-            className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
-              isDark
-                ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
-                : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
-            }`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0 pr-2">
-              <div
-                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                  isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
-                }`}
-              >
-                <Keyboard className="w-5 h-5 stroke-[1.8]" />
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
+                    Data Management
+                  </h3>
+                  <p
+                    className={`text-xs truncate ${
+                      isDark ? 'text-neutral-400' : 'text-neutral-500'
+                    }`}
+                  >
+                    {notes.length} note{notes.length === 1 ? '' : 's'} stored · Export, backup & clear
+                  </p>
+                </div>
               </div>
 
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
-                  Auto Open Keyboard
-                </h3>
-                <p
-                  className={`text-xs truncate ${
-                    isDark ? 'text-neutral-400' : 'text-neutral-500'
-                  }`}
-                >
-                  Auto-open soft keyboard when focusing inputs & search
-                </p>
-              </div>
-            </div>
-
-            {/* Toggle switch with fluid spring animation matching the user screenshot */}
-            <div className="shrink-0 flex items-center">
-              <div
-                role="switch"
-                aria-checked={autoOpenKeyboard}
-                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-200 ease-in-out ${
-                  autoOpenKeyboard
-                    ? isDark
-                      ? 'bg-[#52525b]'
-                      : 'bg-neutral-800'
-                    : isDark
-                    ? 'bg-[#27272a]'
-                    : 'bg-neutral-300'
-                }`}
-              >
-                <motion.span
-                  layout
-                  transition={{ type: 'spring', stiffness: 500, damping: 32 }}
-                  className={`pointer-events-none inline-block h-6 w-6 rounded-full bg-white shadow-sm ring-0 ${
-                    autoOpenKeyboard ? 'translate-x-5' : 'translate-x-0'
+              <div className="flex items-center gap-2 shrink-0">
+                <ChevronRight
+                  className={`w-4 h-4 ${
+                    isDark ? 'text-neutral-500' : 'text-neutral-400'
                   }`}
                 />
               </div>
             </div>
-          </div>
-        </section>
-
-        {/* SECTION 2: DATA & STORAGE */}
-        <section>
-          <div
-            className={`text-[11px] font-bold tracking-wider uppercase mb-2.5 px-1 ${
-              isDark ? 'text-neutral-500' : 'text-neutral-500'
-            }`}
-          >
-            DATA & STORAGE
-          </div>
-
-          <div
-            id="setting-data-card"
-            onClick={() => setActiveModal('data')}
-            role="button"
-            tabIndex={0}
-            className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
-              isDark
-                ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
-                : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
-            }`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0 pr-2">
-              <div
-                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                  isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
-                }`}
-              >
-                <Database className="w-5 h-5 stroke-[1.8]" />
-              </div>
-
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
-                  Data Management
-                </h3>
-                <p
-                  className={`text-xs truncate ${
-                    isDark ? 'text-neutral-400' : 'text-neutral-500'
-                  }`}
-                >
-                  {notes.length} note{notes.length === 1 ? '' : 's'} stored · Export, backup & clear
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <ChevronRight
-                className={`w-4 h-4 ${
-                  isDark ? 'text-neutral-500' : 'text-neutral-400'
-                }`}
-              />
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* SECTION 3: SYSTEM & APP INFO */}
-        <section>
-          <div
-            className={`text-[11px] font-bold tracking-wider uppercase mb-2.5 px-1 ${
-              isDark ? 'text-neutral-500' : 'text-neutral-500'
-            }`}
-          >
-            SYSTEM & INFO
-          </div>
+        {matchesInfo && (
+          <section>
+            <div
+              className={`text-[11px] font-bold tracking-wider uppercase mb-2.5 px-1 ${
+                isDark ? 'text-neutral-500' : 'text-neutral-500'
+              }`}
+            >
+              SYSTEM & INFO
+            </div>
 
-          <div
-            id="setting-info-card"
-            onClick={() => setActiveModal('info')}
-            role="button"
-            tabIndex={0}
-            className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
-              isDark
-                ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
-                : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
-            }`}
-          >
-            <div className="flex items-center gap-3.5 min-w-0 pr-2">
-              <div
-                className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
-                  isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
-                }`}
-              >
-                <Info className="w-5 h-5 stroke-[1.8]" />
-              </div>
-
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
-                  App Info
-                </h3>
-                <p
-                  className={`text-xs truncate ${
-                    isDark ? 'text-neutral-400' : 'text-neutral-500'
+            <div
+              id="setting-info-card"
+              onClick={() => setActiveModal('info')}
+              role="button"
+              tabIndex={0}
+              className={`w-full p-4 rounded-2xl flex items-center justify-between cursor-pointer active:scale-[0.99] transition-all shadow-sm ${
+                isDark
+                  ? 'bg-[#141414] hover:bg-[#1a1a1a] text-white'
+                  : 'bg-white hover:bg-neutral-50/90 border border-neutral-200/80 text-neutral-900'
+              }`}
+            >
+              <div className="flex items-center gap-3.5 min-w-0 pr-2">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+                    isDark ? 'bg-[#202020] text-white' : 'bg-[#f0f1f4] text-neutral-800'
                   }`}
                 >
-                  memento · Minimal offline notebook
-                </p>
+                  <Info className="w-5 h-5 stroke-[1.8]" />
+                </div>
+
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold tracking-tight truncate leading-snug">
+                    App Info
+                  </h3>
+                  <p
+                    className={`text-xs truncate ${
+                      isDark ? 'text-neutral-400' : 'text-neutral-500'
+                    }`}
+                  >
+                    memento · Minimal offline notebook
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    isDark
+                      ? 'bg-[#202020] text-neutral-200'
+                      : 'bg-[#f0f1f4] text-neutral-700'
+                  }`}
+                >
+                  v{appInfo.version}
+                </span>
+                <ChevronRight
+                  className={`w-4 h-4 ${
+                    isDark ? 'text-neutral-500' : 'text-neutral-400'
+                  }`}
+                />
               </div>
             </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                  isDark
-                    ? 'bg-[#202020] text-neutral-200'
-                    : 'bg-[#f0f1f4] text-neutral-700'
-                }`}
-              >
-                v{appInfo.version}
-              </span>
-              <ChevronRight
-                className={`w-4 h-4 ${
-                  isDark ? 'text-neutral-500' : 'text-neutral-400'
-                }`}
-              />
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
       </main>
 
       {/* Export notification toast */}

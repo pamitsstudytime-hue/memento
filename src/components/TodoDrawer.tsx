@@ -15,6 +15,7 @@ import { ThemeMode, NoteItem, TodoSubItem } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { capitalizeFirstChar } from '../lib/formatters';
 import { SubDrawerMoreMenu } from './SubDrawerMoreMenu';
+import { getTodoIconComponent } from '../lib/todoIcons';
 
 interface TodoDrawerProps {
   isOpen: boolean;
@@ -205,11 +206,12 @@ export function TodoDrawer({
                     isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-600'
                   }`}
                 >
-                  {isTodayList ? (
-                    <Calendar className="w-5 h-5 stroke-[2]" />
-                  ) : (
-                    <ListTodo className="w-5 h-5 stroke-[2]" />
-                  )}
+                  {(() => {
+                    const HeaderIcon = isTodayList
+                      ? Calendar
+                      : getTodoIconComponent(note.todoIcon, note.title, isTodayList);
+                    return <HeaderIcon className="w-5 h-5 stroke-[2]" />;
+                  })()}
                 </div>
                 <div className="min-w-0">
                   <h2 className="text-lg font-bold tracking-tight truncate leading-tight">

@@ -9,10 +9,13 @@ import {
   ListTodo,
   AlertCircle,
   ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
-import { ThemeMode, TodoSubItem } from '../types';
+import { ThemeMode, TodoSubItem, NoteItem } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { triggerHaptic } from '../lib/capacitor';
+import { getTodoIconComponent } from '../lib/todoIcons';
+import { TaskListSelectModal } from './TaskListSelectModal';
 
 export interface DayTaskItem {
   task: TodoSubItem;
@@ -26,11 +29,17 @@ interface DayDetailsDrawerProps {
   todayStr: string;
   theme: ThemeMode;
   tasks: DayTaskItem[];
+  allLists?: NoteItem[];
   overdueTasks?: DayTaskItem[];
   onClose: () => void;
   onToggleTask: (listId: string, taskId: string) => void;
   onDeleteTask: (listId: string, taskId: string) => void;
-  onAddTask: (text: string, dateStr: string) => void;
+  onAddTask: (
+    text: string,
+    dateStr: string,
+    listId?: string,
+    newListName?: string
+  ) => void;
   onOpenTaskEdit: (item: DayTaskItem) => void;
   onOpenSchedule?: (item: DayTaskItem) => void;
 }
@@ -75,6 +84,7 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
   todayStr,
   theme,
   tasks,
+  allLists = [],
   overdueTasks = [],
   onClose,
   onToggleTask,
@@ -85,11 +95,19 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
   const isDark = theme === 'dark';
   const isDesktop = useIsDesktop();
   const [inputText, setInputText] = useState('');
+  const [preselectedListId, setPreselectedListId] = useState<string | null>(null);
+  const [preselectedListName, setPreselectedListName] = useState<string | null>(null);
+  const [pendingTaskForModal, setPendingTaskForModal] = useState<string | null>(null);
+  const [isPreselectModalOpen, setIsPreselectModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setInputText('');
+      setPreselectedListId(null);
+      setPreselectedListName(null);
+      setPendingTaskForModal(null);
+      setIsPreselectModalOpen(false);
       const timer = setTimeout(() => {
         inputRef.current?.focus();
       }, 250);
@@ -103,14 +121,47 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.task.completed).length;
 
+  // Selected list label and icon for the input chip
+  const currentPreselectedList = preselectedListId
+    ? allLists.find((l) => l.id === preselectedListId)
+    : null;
+
+  const listPillLabel = currentPreselectedList
+    ? currentPreselectedList.title || 'List'
+    : preselectedListName || 'Select list';
+
+  const ListPillIcon = currentPreselectedList
+    ? getTodoIconComponent(currentPreselectedList.todoIcon, currentPreselectedList.title)
+    : ListTodo;
+
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const trimmed = inputText.trim();
     if (!trimmed) return;
-    triggerHaptic('light');
-    onAddTask(trimmed, dateStr);
-    setInputText('');
-    inputRef.current?.focus();
+
+    if (isToday) {
+      triggerHaptic('light');
+      onAddTask(trimmed, dateStr);
+      setInputText('');
+      inputRef.current?.focus();
+    } else {
+      // If user already pre-selected a specific list
+      if (preselectedListId) {
+        triggerHaptic('light');
+        onAddTask(trimmed, dateStr, preselectedListId);
+        setInputText('');
+        inputRef.current?.focus();
+      } else if (preselectedListName) {
+        triggerHaptic('light');
+        onAddTask(trimmed, dateStr, undefined, preselectedListName);
+        setInputText('');
+        inputRef.current?.focus();
+      } else {
+        // Prompt for what list to add it to!
+        triggerHaptic('selection');
+        setPendingTaskForModal(trimmed);
+      }
+    }
   };
 
   return (
@@ -237,6 +288,33 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
                     isDark ? 'text-white' : 'text-neutral-900'
                   }`}
                 />
+
+                {/* If non-today: List selector chip */}
+                {!isToday && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setIsPreselectModalOpen(true);
+                    }}
+                    className={`h-7 px-2 sm:px-2.5 rounded-full flex items-center justify-center gap-1 sm:gap-1.5 text-[11px] font-medium transition-all shrink-0 max-w-[40px] sm:max-w-[130px] ${
+                      preselectedListId || preselectedListName
+                        ? isDark
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                          : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : isDark
+                        ? 'bg-neutral-800/80 text-neutral-400 hover:text-white border border-neutral-700/60'
+                        : 'bg-neutral-200/70 text-neutral-600 hover:text-neutral-900 border border-neutral-300/60'
+                    }`}
+                    title={listPillLabel}
+                    aria-label={listPillLabel}
+                  >
+                    <ListPillIcon className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+                    <span className="hidden sm:inline truncate">{listPillLabel}</span>
+                    <ChevronDown className="w-3 h-3 opacity-60 shrink-0 hidden sm:block" />
+                  </button>
+                )}
+
                 <button
                   type="submit"
                   disabled={!inputText.trim()}
@@ -328,6 +406,53 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
               )}
             </div>
           </motion.div>
+
+          {/* List Selection Modal when prompted on submit for non-today date */}
+          <TaskListSelectModal
+            isOpen={!!pendingTaskForModal}
+            taskText={pendingTaskForModal || ''}
+            dateStr={dateStr}
+            todayStr={todayStr}
+            isDark={isDark}
+            allLists={allLists}
+            onClose={() => {
+              // If closed without picking, default to "Others" as requested
+              if (pendingTaskForModal) {
+                onAddTask(pendingTaskForModal, dateStr, undefined, 'Others');
+                setPendingTaskForModal(null);
+                setInputText('');
+              }
+            }}
+            onSelectList={(listId, newListName) => {
+              if (pendingTaskForModal) {
+                onAddTask(pendingTaskForModal, dateStr, listId, newListName);
+                setPendingTaskForModal(null);
+                setInputText('');
+                inputRef.current?.focus();
+              }
+            }}
+          />
+
+          {/* List Pre-Selection Modal when tapping list pill in input bar */}
+          <TaskListSelectModal
+            isOpen={isPreselectModalOpen}
+            taskText={inputText.trim() || 'Upcoming task'}
+            dateStr={dateStr}
+            todayStr={todayStr}
+            isDark={isDark}
+            allLists={allLists}
+            onClose={() => setIsPreselectModalOpen(false)}
+            onSelectList={(listId, newListName) => {
+              if (listId) {
+                setPreselectedListId(listId);
+                setPreselectedListName(null);
+              } else if (newListName) {
+                setPreselectedListName(newListName);
+                setPreselectedListId(null);
+              }
+              setIsPreselectModalOpen(false);
+            }}
+          />
         </div>
       )}
     </AnimatePresence>

@@ -49,6 +49,11 @@ import { parseTodoItemsFromNote } from './TodoDrawer';
 import { triggerHaptic } from '../lib/capacitor';
 import { ImageLightbox } from './ImageLightbox';
 import { capitalizeFirstChar } from '../lib/formatters';
+import {
+  TODO_ICON_OPTIONS,
+  detectTodoIcon,
+  getTodoIconComponent,
+} from '../lib/todoIcons';
 
 interface NewNoteModalProps {
   isOpen: boolean;
@@ -70,6 +75,7 @@ interface NewNoteModalProps {
       password?: string;
       tags?: string[];
       todoItems?: TodoSubItem[];
+      todoIcon?: string;
       hasVoiceNote?: boolean;
       voiceDuration?: string;
       voiceAudioUrl?: string;
@@ -501,6 +507,27 @@ export function NewNoteModal({
   const [isListeningSpeech, setIsListeningSpeech] = useState(false);
   const [speechNotice, setSpeechNotice] = useState<string | null>(null);
 
+  // Todo list icon option (at the right of title)
+  const [todoIcon, setTodoIcon] = useState<string>('list');
+  const [isCustomTodoIconSelected, setIsCustomTodoIconSelected] = useState(false);
+  const [showTodoIconPicker, setShowTodoIconPicker] = useState(false);
+  const todoIconPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showTodoIconPicker) return;
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (todoIconPickerRef.current && !todoIconPickerRef.current.contains(e.target as Node)) {
+        setShowTodoIconPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [showTodoIconPicker]);
+
   const titleInputRef = useRef<HTMLInputElement>(null);
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const todoFloatingInputRef = useRef<HTMLInputElement>(null);
@@ -729,6 +756,15 @@ export function NewNoteModal({
       }
       setActivePlayingId(null);
       setPlaybackTime(0);
+
+      if (editingNote?.todoIcon) {
+        setTodoIcon(editingNote.todoIcon);
+        setIsCustomTodoIconSelected(true);
+      } else {
+        setTodoIcon(detectTodoIcon(editingNote?.title || ''));
+        setIsCustomTodoIconSelected(false);
+      }
+      setShowTodoIconPicker(false);
 
       if (autoOpenKeyboard) {
         setTimeout(() => {
@@ -1498,6 +1534,7 @@ export function NewNoteModal({
           entryType: 'todo',
           isTodo: true,
           todoItems: finalTodoItems,
+          todoIcon: todoIcon || targetNote.todoIcon || detectTodoIcon(finalTitle),
           documents: attachedDocs.length > 0 ? attachedDocs : undefined,
           hasVoiceNote: hasAnyVoice,
           voiceDuration: primaryVoiceDur,
@@ -1573,6 +1610,7 @@ export function NewNoteModal({
         entryType: 'todo',
         isTodo: true,
         todoItems: finalTodoItems,
+        todoIcon: todoIcon || detectTodoIcon(finalTitle),
         documents: attachedDocs.length > 0 ? attachedDocs : undefined,
         hasVoiceNote: hasAnyVoice,
         voiceDuration: primaryVoiceDur,
@@ -2344,23 +2382,138 @@ export function NewNoteModal({
                     className="space-y-3"
                   >
                     <div className={`relative ${isSuggestionsActive ? 'z-40' : ''}`}>
-                      <input
-                        ref={titleInputRef}
-                        type="text"
-                        value={title}
-                        onChange={(e) => {
-                          setTitle(e.target.value);
-                          setShowTitleSuggestions(true);
-                        }}
-                        onFocus={() => setShowTitleSuggestions(true)}
-                        onBlur={() => {
-                          setTimeout(() => setShowTitleSuggestions(false), 220);
-                        }}
-                        placeholder="Todo List Title..."
-                        className={`w-full bg-transparent text-xl font-bold tracking-tight placeholder:text-neutral-600 focus:outline-none ${
-                          isDark ? 'text-white' : 'text-neutral-900'
-                        }`}
-                      />
+                      <div className="flex items-center justify-between gap-2.5">
+                        <input
+                          ref={titleInputRef}
+                          type="text"
+                          value={title}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTitle(val);
+                            setShowTitleSuggestions(true);
+                            setShowTodoIconPicker(false);
+                            if (!isCustomTodoIconSelected) {
+                              setTodoIcon(detectTodoIcon(val));
+                            }
+                          }}
+                          onFocus={() => {
+                            setShowTitleSuggestions(true);
+                            setShowTodoIconPicker(false);
+                          }}
+                          onBlur={() => {
+                            setTimeout(() => setShowTitleSuggestions(false), 220);
+                          }}
+                          placeholder="Todo List Title..."
+                          className={`w-full bg-transparent text-xl font-bold tracking-tight placeholder:text-neutral-600 focus:outline-none min-w-0 flex-1 ${
+                            isDark ? 'text-white' : 'text-neutral-900'
+                          }`}
+                        />
+
+                        {/* Icon option button at the right */}
+                        <div className="relative shrink-0 z-30" ref={todoIconPickerRef}>
+                          <button
+                            id="todo-icon-option-btn"
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              triggerHaptic('light');
+                              setShowTitleSuggestions(false);
+                              setShowTodoIconPicker((prev) => !prev);
+                            }}
+                            className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 active:scale-95 transition-all border ${
+                              isDark
+                                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25 shadow-xs'
+                                : 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 shadow-xs'
+                            }`}
+                            title="Choose list icon"
+                            aria-label="Choose list icon"
+                          >
+                            {(() => {
+                              const effectiveIconId = todoIcon || detectTodoIcon(title);
+                              const ActiveIcon = getTodoIconComponent(effectiveIconId, title);
+                              return <ActiveIcon className="w-5 h-5 stroke-[2]" />;
+                            })()}
+                          </button>
+
+                          {/* Popover to pick icon */}
+                          <AnimatePresence>
+                            {showTodoIconPicker && (
+                              <>
+                                {/* Invisible backdrop to close picker and prevent overlapping clicks */}
+                                <div
+                                  className="fixed inset-0 z-40"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowTodoIconPicker(false);
+                                  }}
+                                />
+
+                                <motion.div
+                                  initial={{ opacity: 0, y: 6, scale: 0.95 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: 3, scale: 0.95 }}
+                                  transition={{ duration: 0.15 }}
+                                  className={`absolute right-0 top-full mt-2.5 w-72 max-w-[calc(100vw-2.5rem)] p-3 rounded-2xl border shadow-2xl z-50 ${
+                                    isDark
+                                      ? 'bg-[#151518] border-neutral-800 text-white shadow-[0_20px_50px_rgba(0,0,0,0.85)]'
+                                      : 'bg-white border-neutral-200 text-neutral-900 shadow-[0_20px_40px_rgba(0,0,0,0.15)]'
+                                  }`}
+                                >
+                                  {/* Header without split line */}
+                                  <div className="flex items-center justify-between px-1 pb-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                      <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                                        List Icon
+                                      </span>
+                                    </div>
+                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 dark:text-emerald-300 border border-emerald-500/30 truncate max-w-[130px]">
+                                      {TODO_ICON_OPTIONS.find((o) => o.id === (todoIcon || detectTodoIcon(title)))?.name || 'Icon'}
+                                    </span>
+                                  </div>
+
+                                  {/* Icons Grid */}
+                                  <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto no-scrollbar pr-0.5">
+                                    {TODO_ICON_OPTIONS.map((opt) => {
+                                      const IconComp = opt.icon;
+                                      const currentEffective = todoIcon || detectTodoIcon(title);
+                                      const isSelected = currentEffective === opt.id;
+                                      return (
+                                        <button
+                                          key={opt.id}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            triggerHaptic('selection');
+                                            setTodoIcon(opt.id);
+                                            setIsCustomTodoIconSelected(true);
+                                            setShowTodoIconPicker(false);
+                                          }}
+                                          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
+                                            isSelected
+                                              ? isDark
+                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-xs shadow-emerald-500/10 scale-[1.03]'
+                                                : 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs shadow-emerald-200 scale-[1.03]'
+                                              : isDark
+                                              ? 'text-neutral-400 hover:text-white hover:bg-neutral-800/80 border border-neutral-800/70 bg-[#1a1a1e]/60'
+                                              : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 border border-neutral-200/70 bg-neutral-50/60'
+                                          }`}
+                                          title={opt.name}
+                                        >
+                                          <IconComp className="w-5 h-5 stroke-[2]" />
+                                          <span className="text-[9.5px] truncate max-w-[54px] mt-1 font-medium select-none">
+                                            {opt.shortLabel}
+                                          </span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </motion.div>
+                              </>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      </div>
 
                       {/* Linked existing list indicator badge */}
                       {linkedExistingNote && (

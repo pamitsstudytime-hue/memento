@@ -15,6 +15,8 @@ import {
   Image as ImageIcon,
   GripVertical,
   Layers,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { NavTab, ThemeMode, NoteItem, TodoSubItem, HomeChipFilter, EntryType } from '../types';
 import { parseTodoItemsFromNote } from './TodoDrawer';
@@ -22,6 +24,7 @@ import { CardContextMenu } from './CardContextMenu';
 import { triggerHaptic, isNativePlatform } from '../lib/capacitor';
 import { capitalizeFirstChar } from '../lib/formatters';
 import { getSafeNoteBadge } from '../lib/safeBadges';
+import { getTodoIconComponent } from '../lib/todoIcons';
 
 function createSampleAudioBlob(): Blob {
   const sampleRate = 44100;
@@ -144,6 +147,18 @@ export function matchesHomeChip(note: NoteItem, chip: HomeChipFilter): boolean {
   if (chip === 'todo') return isTodoNote(note);
   if (chip === 'diary') return isDiaryNote(note);
   return true;
+}
+
+export function computeChipCounts(notes: NoteItem[]): Record<HomeChipFilter, number> {
+  const baseNotes = notes.filter((n) => !n.isArchived);
+  return {
+    all: baseNotes.length,
+    note: baseNotes.filter(isRegularNote).length,
+    safe: baseNotes.filter(isSafeNote).length,
+    key: baseNotes.filter(isKeyNote).length,
+    todo: baseNotes.filter(isTodoNote).length,
+    diary: baseNotes.filter(isDiaryNote).length,
+  };
 }
 
 export const CHIPS: Array<{
@@ -336,6 +351,12 @@ function NoteCard({
   const completedCount = todoItems.filter((t) => t.completed).length;
   const totalCount = todoItems.length;
   const cleanContent = getCleanNonTodoContent(note);
+  const [isTodoExpanded, setIsTodoExpanded] = useState(false);
+  const COLLAPSED_TODO_LIMIT = 4;
+  const isLongTodoList = todoItems.length > COLLAPSED_TODO_LIMIT;
+  const visibleTodoItems = isTodoExpanded
+    ? todoItems
+    : todoItems.slice(0, COLLAPSED_TODO_LIMIT);
 
   const allImages = note.images && note.images.length > 0 ? note.images : note.imageUrl ? [note.imageUrl] : [];
   const voiceCount = note.voiceNotes && note.voiceNotes.length > 0 ? note.voiceNotes.length : note.hasVoiceNote ? 1 : 0;
@@ -528,7 +549,10 @@ function NoteCard({
               }`}
               title="Todo"
             >
-              <ListTodo className="w-3 h-3 md:w-2.5 md:h-2.5 text-emerald-500 dark:text-emerald-300 shrink-0" />
+              {(() => {
+                const TodoBadgeIcon = getTodoIconComponent(note.todoIcon, note.title);
+                return <TodoBadgeIcon className="w-3 h-3 md:w-2.5 md:h-2.5 text-emerald-500 dark:text-emerald-300 shrink-0" />;
+              })()}
               <span className="hidden md:inline">Todo</span>
             </span>
           )}
@@ -588,59 +612,86 @@ function NoteCard({
 
       {!isPassKey && (
         <div className="mt-1">
-          {/* Interactive Todo List (Shows up to 8 sub-tasks) */}
+          {/* Interactive Todo List (Collapsed to 4 items by default, expandable to locked scrollable container) */}
           {isTodo && (
             <div className="mt-2.5 space-y-1.5">
               {todoItems.length > 0 ? (
                 <div className="space-y-1.5">
-                  {todoItems.slice(0, 8).map((item, itemIdx) => (
-                    <div
-                      key={`card-todo-${note.id}-${item.id || itemIdx}`}
-                      className="flex items-center gap-2 group/item text-left"
+                  <div
+                    className={`space-y-1.5 ${
+                      isTodoExpanded
+                        ? 'max-h-56 sm:max-h-64 overflow-y-auto overscroll-contain pr-1 no-scrollbar'
+                        : ''
+                    }`}
+                  >
+                    {visibleTodoItems.map((item, itemIdx) => (
+                      <div
+                        key={`card-todo-${note.id}-${item.id || itemIdx}`}
+                        className="flex items-center gap-2 group/item text-left py-0.5"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onToggleTodoItem) {
+                            onToggleTodoItem(note.id, item.id);
+                          }
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+                            item.completed
+                              ? 'bg-emerald-500 text-white'
+                              : isDark
+                              ? 'border border-neutral-600 hover:border-neutral-400 bg-transparent'
+                              : 'border border-neutral-300 hover:border-neutral-400 bg-transparent'
+                          }`}
+                          title={item.completed ? 'Mark pending' : 'Mark done'}
+                        >
+                          {item.completed && (
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          )}
+                        </button>
+                        <span
+                          className={`text-xs truncate select-none ${
+                            item.completed
+                              ? 'line-through text-neutral-500'
+                              : isDark
+                              ? 'text-neutral-300'
+                              : 'text-neutral-700'
+                          }`}
+                        >
+                          {item.text}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Collapse / Locked Size Toggle for Long Lists */}
+                  {isLongTodoList && (
+                    <button
+                      type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (onToggleTodoItem) {
-                          onToggleTodoItem(note.id, item.id);
-                        }
+                        triggerHaptic('light');
+                        setIsTodoExpanded((prev) => !prev);
                       }}
-                    >
-                      <button
-                        type="button"
-                        className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
-                          item.completed
-                            ? 'bg-emerald-500 text-white'
-                            : isDark
-                            ? 'border border-neutral-600 hover:border-neutral-400 bg-transparent'
-                            : 'border border-neutral-300 hover:border-neutral-400 bg-transparent'
-                        }`}
-                        title={item.completed ? 'Mark pending' : 'Mark done'}
-                      >
-                        {item.completed && (
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        )}
-                      </button>
-                      <span
-                        className={`text-xs truncate select-none ${
-                          item.completed
-                            ? 'line-through text-neutral-500'
-                            : isDark
-                            ? 'text-neutral-300'
-                            : 'text-neutral-700'
-                        }`}
-                      >
-                        {item.text}
-                      </span>
-                    </div>
-                  ))}
-
-                  {todoItems.length > 8 && (
-                    <div
-                      className={`text-[10.5px] font-medium pt-0.5 ${
-                        isDark ? 'text-neutral-500' : 'text-neutral-400'
+                      className={`inline-flex items-center gap-1 mt-1 text-[11px] font-medium px-2 py-0.5 rounded-md transition-colors cursor-pointer select-none ${
+                        isDark
+                          ? 'text-neutral-400 hover:text-white bg-neutral-800/70 hover:bg-neutral-800'
+                          : 'text-neutral-600 hover:text-neutral-900 bg-neutral-200/70 hover:bg-neutral-200'
                       }`}
                     >
-                      +{todoItems.length - 8} more tasks
-                    </div>
+                      {isTodoExpanded ? (
+                        <>
+                          <span>Show less</span>
+                          <ChevronUp className="w-3 h-3 stroke-[2.5]" />
+                        </>
+                      ) : (
+                        <>
+                          <span>+{todoItems.length - COLLAPSED_TODO_LIMIT} more</span>
+                          <ChevronDown className="w-3 h-3 stroke-[2.5]" />
+                        </>
+                      )}
+                    </button>
                   )}
                 </div>
               ) : (
@@ -651,7 +702,7 @@ function NoteCard({
 
               {cleanContent && (
                 <p
-                  className={`text-xs mt-1.5 line-clamp-4 leading-relaxed break-words ${
+                  className={`text-xs mt-1.5 line-clamp-3 leading-relaxed break-words ${
                     isDark ? 'text-neutral-400' : 'text-neutral-600'
                   }`}
                 >
@@ -1193,8 +1244,8 @@ function estimateNoteHeight(note: NoteItem): number {
   const isTodo = note.entryType === 'todo' || !!note.isTodo;
   if (isTodo) {
     const todoItems = parseTodoItemsFromNote(note);
-    const count = Math.min(todoItems.length, 8);
-    h += count * 28 + 12;
+    const count = Math.min(todoItems.length, 4);
+    h += count * 28 + (todoItems.length > 4 ? 32 : 12);
   }
 
   if (note.content && !isTodo) {
@@ -1259,69 +1310,8 @@ function estimateNoteHeight(note: NoteItem): number {
   return (
     <main
       ref={scrollContainerRef}
-      className="flex-1 min-h-0 w-full px-3.5 sm:px-5 md:px-8 lg:px-10 pt-1.5 sm:pt-2 md:pt-4 pb-28 md:pb-8 overflow-y-auto overscroll-contain no-scrollbar relative flex flex-col"
+      className="flex-1 min-h-0 w-full px-3.5 sm:px-5 md:px-8 lg:px-10 pt-3 sm:pt-3.5 md:pt-4 pb-28 md:pb-8 overflow-y-auto overscroll-contain no-scrollbar relative flex flex-col"
     >
-      {/* Home Category Filter Chips Bar */}
-      {showHomeChips && (
-        <div
-          id="home-chips-bar"
-          className={`sticky top-0 z-20 shrink-0 -mx-3.5 sm:-mx-5 md:-mx-8 lg:-mx-10 px-3.5 sm:px-5 md:px-8 lg:px-10 pt-1 pb-3 mb-2 md:mb-3.5 backdrop-blur-xl transition-colors duration-200 ${
-            isDark ? 'bg-[#09090b]/90' : 'bg-[#f4f4f6]/90'
-          }`}
-        >
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth py-0.5">
-            {CHIPS.map((chip) => {
-              const ChipIcon = chip.icon;
-              const isActive = activeChip === chip.id;
-              const count = chipCounts[chip.id];
-              return (
-                <button
-                  key={chip.id}
-                  id={`home-chip-${chip.id}`}
-                  type="button"
-                  onClick={() => handleChipClick(chip.id)}
-                  className={`h-8 sm:h-8.5 px-3 sm:px-3.5 rounded-full inline-flex items-center gap-1.5 shrink-0 text-xs sm:text-[13px] font-medium tracking-tight active:scale-95 transition-all duration-150 cursor-pointer select-none ${
-                    isActive
-                      ? isDark
-                        ? 'bg-neutral-100 text-neutral-950 font-semibold shadow-xs'
-                        : 'bg-neutral-900 text-white font-semibold shadow-xs'
-                      : isDark
-                      ? 'bg-[#18181b] hover:bg-[#222226] text-neutral-400 hover:text-neutral-200 border border-neutral-800/80'
-                      : 'bg-[#eeeff2] hover:bg-[#e4e6ea] text-neutral-600 hover:text-neutral-900 border border-neutral-200/80'
-                  }`}
-                >
-                  <ChipIcon
-                    className={`w-3.5 h-3.5 stroke-[2] shrink-0 transition-colors ${
-                      isActive
-                        ? isDark
-                          ? 'text-neutral-950'
-                          : 'text-white'
-                        : isDark
-                        ? 'text-neutral-400'
-                        : 'text-neutral-500'
-                    }`}
-                  />
-                  <span className="whitespace-nowrap">{chip.label}</span>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none transition-colors ${
-                      isActive
-                        ? isDark
-                          ? 'bg-neutral-950/15 text-neutral-950'
-                          : 'bg-white/20 text-white'
-                        : isDark
-                        ? 'bg-neutral-800 text-neutral-400'
-                        : 'bg-neutral-300/70 text-neutral-600'
-                    }`}
-                  >
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Content Area: Masonry Cards Grid OR Clean Empty State */}
       {filteredNotes.length > 0 ? (
         <div

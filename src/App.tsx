@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { TopBar } from './components/TopBar';
 import { NavBar } from './components/NavBar';
-import { EmptyBody } from './components/EmptyBody';
+import { EmptyBody, computeChipCounts } from './components/EmptyBody';
 import { DrawerMenu } from './components/DrawerMenu';
 import { SearchDrawer } from './components/SearchDrawer';
 import { NewNoteModal } from './components/NewNoteModal';
@@ -24,12 +24,14 @@ import {
   PersonalInfoField,
   AppPage,
   HomeChipFilter,
+  CategoryFilter,
 } from './types';
 import {
   updateNativeStatusBar,
   registerNativeBackButton,
   triggerHaptic,
 } from './lib/capacitor';
+import { detectTodoIcon } from './lib/todoIcons';
 
 
 export default function App() {
@@ -292,6 +294,27 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Context-aware default category for search drawer:
+  // - Todo page -> 'todo'
+  // - Safe page -> 'safe'
+  // - Settings page -> 'settings'
+  // - Diary tab -> 'diary'
+  // - Home page -> 'all'
+  const currentSearchCategory: CategoryFilter = useMemo(() => {
+    if (currentPage === 'todo' || activeTab === 'todo') return 'todo';
+    if (currentPage === 'safe' || activeTab === 'vault' || activeTab === 'safe') return 'safe';
+    if (currentPage === 'settings') return 'settings';
+    if (activeTab === 'diary') return 'diary';
+    if (currentPage === 'main') {
+      if (homeChip === 'todo') return 'todo';
+      if (homeChip === 'safe' || homeChip === 'key') return 'safe';
+      if (homeChip === 'diary') return 'diary';
+      if (homeChip === 'notes') return 'notes';
+      return 'all';
+    }
+    return 'all';
+  }, [currentPage, activeTab, homeChip]);
+
   const handleSaveNote = (
     title: string,
     content: string,
@@ -304,6 +327,7 @@ export default function App() {
       password?: string;
       tags?: string[];
       todoItems?: TodoSubItem[];
+      todoIcon?: string;
       hasVoiceNote?: boolean;
       voiceDuration?: string;
       voiceAudioUrl?: string;
@@ -337,6 +361,7 @@ export default function App() {
       password: extra?.password,
       tags: extra?.tags,
       todoItems: extra?.todoItems,
+      todoIcon: extra?.todoIcon || (isTodo ? detectTodoIcon(title) : undefined),
       hasVoiceNote: extra?.hasVoiceNote,
       voiceDuration: extra?.voiceDuration,
       voiceAudioUrl: extra?.voiceAudioUrl,
@@ -455,6 +480,15 @@ export default function App() {
 
   const isDark = theme === 'dark';
 
+  const showHomeChips =
+    currentPage === 'main' &&
+    (activeTab === 'home' ||
+      activeTab === 'notes' ||
+      activeTab === 'vault' ||
+      activeTab === 'safe');
+
+  const chipCounts = useMemo(() => computeChipCounts(notes), [notes]);
+
   return (
     <div
       className={`h-full h-dvh w-full flex justify-center overflow-hidden transition-colors duration-200 ${
@@ -518,6 +552,7 @@ export default function App() {
               autoOpenKeyboard={autoOpenKeyboard}
               onBack={() => setCurrentPage('main')}
               onOpenSearch={() => setIsSearchDrawerOpen(true)}
+              onSelectNote={handleSelectNote}
               onToggleTheme={toggleTheme}
               onToggleNavbarFloating={toggleNavbarFloating}
               onToggleAutoOpenKeyboard={toggleAutoOpenKeyboard}
@@ -585,6 +620,9 @@ export default function App() {
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
                 onOpenSearch={() => setIsSearchDrawerOpen(true)}
+                showChips={showHomeChips}
+                chipCounts={chipCounts}
+                onSelectChip={handleSelectHomeChip}
               />
 
               {/* Empty Body: responsive notes grid on desktop, single column on mobile */}
@@ -649,6 +687,7 @@ export default function App() {
           theme={theme}
           notes={notes}
           autoOpenKeyboard={autoOpenKeyboard}
+          defaultCategory={currentSearchCategory}
           onClose={() => setIsSearchDrawerOpen(false)}
           onSelectNote={(note) => {
             handleSelectNote(note);
@@ -656,6 +695,15 @@ export default function App() {
           onCreateWithTitle={(title) => {
             handleSaveNote(title, '');
           }}
+          onOpenSettings={() => {
+            setIsSearchDrawerOpen(false);
+            setCurrentPage('settings');
+          }}
+          onOpenData={() => {
+            setIsSearchDrawerOpen(false);
+            setIsDataDrawerOpen(true);
+          }}
+          onToggleTheme={toggleTheme}
         />
 
         {/* Drawer Menu opened by 'More' button - features grid and theme footer */}

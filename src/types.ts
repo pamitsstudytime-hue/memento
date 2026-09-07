@@ -84,6 +84,7 @@ export interface NoteItem {
   service?: string;
   password?: string;
   todoItems?: TodoSubItem[];
+  todoIcon?: string;
   hasVoiceNote?: boolean;
   voiceDuration?: string;
   voiceAudioUrl?: string;
@@ -94,7 +95,7 @@ export interface NoteItem {
   personalInfo?: PersonalInfoField[];
 }
 
-export type CategoryFilter = 'all' | 'todo' | 'safe' | 'diary' | 'notes';
+export type CategoryFilter = 'all' | 'todo' | 'safe' | 'diary' | 'notes' | 'settings';
 export type HomeChipFilter = 'all' | 'note' | 'safe' | 'key' | 'todo' | 'diary';
 
 export function getNoteCategory(note: NoteItem): 'todo' | 'safe' | 'diary' | 'notes' {

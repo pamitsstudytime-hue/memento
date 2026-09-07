@@ -505,7 +505,7 @@ export function DiaryDrawer({
                         id="diary-card-copy-btn"
                         type="button"
                         onClick={handleCopy}
-                        className={`h-6 px-2 rounded-lg flex items-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
+                        className={`h-6 w-6 sm:w-auto px-0 sm:px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
                           copied
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : isDark
@@ -517,12 +517,12 @@ export function DiaryDrawer({
                         {copied ? (
                           <>
                             <Check className="w-3 h-3 text-emerald-400" />
-                            <span>Copied</span>
+                            <span className="hidden sm:inline">Copied</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3 h-3" />
-                            <span>Copy</span>
+                            <span className="hidden sm:inline">Copy</span>
                           </>
                         )}
                       </button>

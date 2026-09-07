@@ -29,7 +29,9 @@ import { TodoDrawer, parseTodoItemsFromNote } from './TodoDrawer';
 import { TaskDrawer } from './TaskDrawer';
 import { DayDetailsDrawer } from './DayDetailsDrawer';
 import { ArchiveDrawer } from './ArchiveDrawer';
+import { TaskListSelectModal } from './TaskListSelectModal';
 import { useIsDesktop } from '../hooks/useIsDesktop';
+import { getTodoIconComponent, detectTodoIcon } from '../lib/todoIcons';
 
 export type TodoTab = 'inbox' | 'today' | 'upcoming';
 
@@ -142,6 +144,9 @@ export function TodoPage({
 
   // Day details drawer state (for opening date details in Upcoming tab)
   const [selectedDayDrawerDate, setSelectedDayDrawerDate] = useState<string | null>(null);
+
+  // Pending task for list prompt in Upcoming tab
+  const [upcomingPendingTaskText, setUpcomingPendingTaskText] = useState<string | null>(null);
 
   // Task drawer edit state
   const [selectedTaskForDrawer, setSelectedTaskForDrawer] = useState<{
@@ -644,7 +649,12 @@ export function TodoPage({
   };
 
   // Add task helper: dispatches to dedicated Today list or creates/updates list
-  const addTaskWithDueDate = (text: string, targetDueDate?: string) => {
+  const addTaskWithDueDate = (
+    text: string,
+    targetDueDate?: string,
+    targetListId?: string,
+    newListName?: string
+  ) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
@@ -690,18 +700,31 @@ export function TodoPage({
       }
     } else {
       // Non-today task (e.g. from Upcoming)
-      // Look for an existing non-today list, or fallback to any active list
-      const nonTodayList = todoLists.find((l) => !l.isTodayList);
-      const targetList = nonTodayList || todoLists[0];
+      // 1. If user targeted a specific existing list:
+      if (targetListId) {
+        const foundList = todoLists.find((l) => l.id === targetListId);
+        if (foundList) {
+          const currentTasks = parseTodoItemsFromNote(foundList);
+          updateNoteTasks(foundList.id, [...currentTasks, newTask]);
+          return;
+        }
+      }
 
-      if (targetList) {
-        const currentTasks = parseTodoItemsFromNote(targetList);
-        updateNoteTasks(targetList.id, [...currentTasks, newTask]);
-      } else {
-        // Create a standard "Tasks" list
-        const newDefaultNote: NoteItem = {
+      // 2. If user specified/created a custom list name (e.g. "Unnamed list", "Others", or user-typed name)
+      if (newListName) {
+        const trimmedName = newListName.trim();
+        const foundExisting = todoLists.find(
+          (l) => (l.title || '').trim().toLowerCase() === trimmedName.toLowerCase() && !l.isArchived
+        );
+        if (foundExisting) {
+          const currentTasks = parseTodoItemsFromNote(foundExisting);
+          updateNoteTasks(foundExisting.id, [...currentTasks, newTask]);
+          return;
+        }
+
+        const newNote: NoteItem = {
           id: `todo-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          title: 'Tasks',
+          title: trimmedName,
           content: `[ ] ${trimmed}${targetDueDate ? ` @${targetDueDate}` : ''}`,
           date: new Date().toLocaleDateString('en-US', {
             month: 'short',
@@ -709,9 +732,38 @@ export function TodoPage({
           }),
           isTodo: true,
           entryType: 'todo',
+          todoIcon: detectTodoIcon(trimmedName),
           todoItems: [newTask],
         };
-        onAddNote(newDefaultNote);
+        onAddNote(newNote);
+        return;
+      }
+
+      // 3. Fallback when not specified: find or create "Others" / "Unnamed list"
+      const existingOthersList = todoLists.find((l) => {
+        const t = (l.title || '').trim().toLowerCase();
+        return (t === 'others' || t === 'other' || t === 'unnamed list' || t === 'unnamed') && !l.isArchived;
+      });
+
+      if (existingOthersList) {
+        const currentTasks = parseTodoItemsFromNote(existingOthersList);
+        updateNoteTasks(existingOthersList.id, [...currentTasks, newTask]);
+      } else {
+        // Create an "Others" list
+        const newOthersNote: NoteItem = {
+          id: `todo-others-${Date.now()}`,
+          title: 'Others',
+          content: `[ ] ${trimmed}${targetDueDate ? ` @${targetDueDate}` : ''}`,
+          date: new Date().toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          isTodo: true,
+          entryType: 'todo',
+          todoIcon: 'list',
+          todoItems: [newTask],
+        };
+        onAddNote(newOthersNote);
       }
     }
   };
@@ -740,6 +792,7 @@ export function TodoPage({
         entryType: 'todo',
         isTodayList: isToday,
         todayDate: isToday ? todayStr : undefined,
+        todoIcon: detectTodoIcon(trimmed),
         todoItems: [],
       };
       onAddNote(newNote);
@@ -748,7 +801,13 @@ export function TodoPage({
     } else if (activeTab === 'today') {
       addTaskWithDueDate(inputText, todayStr);
     } else if (activeTab === 'upcoming') {
-      addTaskWithDueDate(inputText, selectedCalendarDate);
+      if (selectedCalendarDate !== todayStr) {
+        setUpcomingPendingTaskText(inputText.trim());
+        setInputText('');
+        return;
+      } else {
+        addTaskWithDueDate(inputText, todayStr);
+      }
     }
 
     setInputText('');
@@ -1435,11 +1494,12 @@ export function TodoPage({
                               : 'bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100'
                           }`}
                         >
-                          {isTodayCard ? (
-                            <Calendar className="w-5 h-5 stroke-[2]" />
-                          ) : (
-                            <ListTodo className="w-5 h-5 stroke-[2]" />
-                          )}
+                          {(() => {
+                            const CardIcon = isTodayCard
+                              ? Calendar
+                              : getTodoIconComponent(list.todoIcon, list.title, isTodayCard);
+                            return <CardIcon className="w-5 h-5 stroke-[2]" />;
+                          })()}
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -2161,20 +2221,53 @@ export function TodoPage({
             ? tasksByDueDateMap.get(selectedDayDrawerDate) || []
             : []
         }
+        allLists={todoLists}
         overdueTasks={
           selectedDayDrawerDate === todayStr ? displayedOverdueTasks : []
         }
         onClose={() => setSelectedDayDrawerDate(null)}
         onToggleTask={handleToggleTask}
         onDeleteTask={handleDeleteTask}
-        onAddTask={(text, targetDate) => {
-          addTaskWithDueDate(text, targetDate);
+        onAddTask={(text, targetDate, listId, newListName) => {
+          addTaskWithDueDate(text, targetDate, listId, newListName);
         }}
         onOpenTaskEdit={(item) => {
           setSelectedTaskForDrawer(item);
         }}
         onOpenSchedule={(item) => {
           setSchedulingTask(item);
+        }}
+      />
+
+      {/* List Selection Prompt for bottom input bar on Upcoming tab */}
+      <TaskListSelectModal
+        isOpen={!!upcomingPendingTaskText}
+        taskText={upcomingPendingTaskText || ''}
+        dateStr={selectedCalendarDate}
+        todayStr={todayStr}
+        isDark={isDark}
+        allLists={todoLists}
+        onClose={() => {
+          if (upcomingPendingTaskText) {
+            addTaskWithDueDate(
+              upcomingPendingTaskText,
+              selectedCalendarDate,
+              undefined,
+              'Others'
+            );
+            setUpcomingPendingTaskText(null);
+          }
+        }}
+        onSelectList={(listId, newListName) => {
+          if (upcomingPendingTaskText) {
+            addTaskWithDueDate(
+              upcomingPendingTaskText,
+              selectedCalendarDate,
+              listId,
+              newListName
+            );
+            setUpcomingPendingTaskText(null);
+          }
         }}
       />
 

@@ -1,6 +1,24 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, Clock, FileText, Sparkles, Plus, KeyRound } from 'lucide-react';
+import {
+  Search,
+  X,
+  Clock,
+  FileText,
+  Sparkles,
+  Plus,
+  KeyRound,
+  Settings,
+  Palette,
+  Database,
+  Lock,
+  Keyboard,
+  Trash2,
+  Info,
+  Sun,
+  Moon,
+  ChevronRight,
+} from 'lucide-react';
 import { ThemeMode, CategoryFilter, getNoteCategory } from '../types';
 import { NoteItem } from './EmptyBody';
 import { useIsDesktop } from '../hooks/useIsDesktop';
@@ -11,17 +29,22 @@ interface SearchDrawerProps {
   theme: ThemeMode;
   notes: NoteItem[];
   autoOpenKeyboard?: boolean;
+  defaultCategory?: CategoryFilter;
   onClose: () => void;
   onSelectNote: (note: NoteItem) => void;
   onCreateWithTitle: (title: string) => void;
+  onOpenSettings?: () => void;
+  onOpenData?: () => void;
+  onToggleTheme?: () => void;
 }
 
-const CATEGORY_CHIPS: { id: CategoryFilter; label: string }[] = [
+const ALL_CATEGORY_CHIPS: { id: CategoryFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'todo', label: 'Todo' },
   { id: 'safe', label: 'Safe' },
   { id: 'diary', label: 'Diary' },
   { id: 'notes', label: 'Notes' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 export function SearchDrawer({
@@ -29,30 +52,176 @@ export function SearchDrawer({
   theme,
   notes,
   autoOpenKeyboard = true,
+  defaultCategory = 'all',
   onClose,
   onSelectNote,
   onCreateWithTitle,
+  onOpenSettings,
+  onOpenData,
+  onToggleTheme,
 }: SearchDrawerProps) {
   const [query, setQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState<CategoryFilter>('all');
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>(defaultCategory || 'all');
   const inputRef = useRef<HTMLInputElement>(null);
   const isDark = theme === 'dark';
 
   const recentTags = ['Ideas', 'Personal', 'Work', 'Reading', 'Tasks'];
 
+  // Reorder chips so the default category for the current page is AT FIRST
+  const orderedChips = useMemo(() => {
+    const targetCat = defaultCategory || 'all';
+    if (targetCat === 'all') {
+      return ALL_CATEGORY_CHIPS;
+    }
+    const targetChip = ALL_CATEGORY_CHIPS.find((c) => c.id === targetCat);
+    if (!targetChip) return ALL_CATEGORY_CHIPS;
+    const remaining = ALL_CATEGORY_CHIPS.filter((c) => c.id !== targetCat);
+    return [targetChip, ...remaining];
+  }, [defaultCategory]);
+
   useEffect(() => {
     if (isOpen) {
       setQuery('');
-      setActiveCategory('all');
+      setActiveCategory(defaultCategory || 'all');
       if (autoOpenKeyboard) {
         setTimeout(() => {
           inputRef.current?.focus();
         }, 150);
       }
     }
-  }, [isOpen, autoOpenKeyboard]);
+  }, [isOpen, defaultCategory, autoOpenKeyboard]);
+
+  // Comprehensive list of app settings items that can be searched and opened directly
+  const settingsItems = useMemo(
+    () => [
+      {
+        id: 'setting-appearance',
+        title: 'Appearance & Theme',
+        description: 'Dark, Light, System modes, and visual accents',
+        keywords: ['theme', 'dark', 'light', 'appearance', 'mode', 'color', 'style'],
+        icon: Palette,
+        badge: 'Appearance',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenSettings) onOpenSettings();
+        },
+      },
+      {
+        id: 'setting-theme-toggle',
+        title: 'Toggle Theme',
+        description: `Currently ${theme === 'dark' ? 'Dark' : 'Light'} mode (tap to switch)`,
+        keywords: ['theme', 'dark', 'light', 'mode', 'switch'],
+        icon: theme === 'dark' ? Sun : Moon,
+        badge: 'Theme',
+        action: () => {
+          triggerHaptic('medium');
+          if (onToggleTheme) onToggleTheme();
+        },
+      },
+      {
+        id: 'setting-data-backup',
+        title: 'Backup & Restore Data',
+        description: 'Export notes to JSON, import backups, or clear app data',
+        keywords: ['backup', 'restore', 'data', 'export', 'import', 'json', 'download', 'storage'],
+        icon: Database,
+        badge: 'Storage',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenData) onOpenData();
+          else if (onOpenSettings) onOpenSettings();
+        },
+      },
+      {
+        id: 'setting-passkey',
+        title: 'PassKey & Safe Vault',
+        description: 'Master PIN, biometric setup, and personal safe credentials',
+        keywords: ['passkey', 'password', 'pin', 'lock', 'vault', 'safe', 'security', 'biometric'],
+        icon: Lock,
+        badge: 'Security',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenSettings) onOpenSettings();
+        },
+      },
+      {
+        id: 'setting-navbar',
+        title: 'Navigation Bar Style',
+        description: 'Toggle between floating pill or fixed bottom navigation',
+        keywords: ['navbar', 'navigation', 'floating', 'bar', 'pill', 'bottom', 'layout'],
+        icon: Settings,
+        badge: 'Layout',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenSettings) onOpenSettings();
+        },
+      },
+      {
+        id: 'setting-keyboard',
+        title: 'Auto-Open Keyboard',
+        description: 'Automatically focus keyboard input on search',
+        keywords: ['keyboard', 'auto', 'focus', 'search', 'input'],
+        icon: Keyboard,
+        badge: 'General',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenSettings) onOpenSettings();
+        },
+      },
+      {
+        id: 'setting-trash',
+        title: 'Trash & Recovery',
+        description: 'View recently deleted notes and restore items',
+        keywords: ['trash', 'bin', 'delete', 'deleted', 'restore', 'recycle'],
+        icon: Trash2,
+        badge: 'Data',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenSettings) onOpenSettings();
+        },
+      },
+      {
+        id: 'setting-about',
+        title: 'About Memento',
+        description: 'Version 1.0.0, offline privacy, and local-first encryption',
+        keywords: ['about', 'version', 'info', 'privacy', 'offline', 'memento'],
+        icon: Info,
+        badge: 'About',
+        action: () => {
+          triggerHaptic('light');
+          onClose();
+          if (onOpenSettings) onOpenSettings();
+        },
+      },
+    ],
+    [theme, onOpenSettings, onOpenData, onToggleTheme, onClose]
+  );
+
+  const filteredSettings = useMemo(() => {
+    if (activeCategory !== 'settings' && activeCategory !== 'all') {
+      return [];
+    }
+    if (!query.trim()) {
+      return activeCategory === 'settings' ? settingsItems : [];
+    }
+    const q = query.toLowerCase().trim();
+    return settingsItems.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.description.toLowerCase().includes(q) ||
+        item.keywords.some((k) => k.includes(q))
+    );
+  }, [activeCategory, query, settingsItems]);
 
   const filteredNotes = useMemo(() => {
+    if (activeCategory === 'settings') {
+      return [];
+    }
     const seen = new Set<string>();
     const list = notes.filter((n) => {
       if (activeCategory !== 'all') {
@@ -169,7 +338,17 @@ export function SearchDrawer({
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search notes, ideas, tags..."
+                placeholder={
+                  activeCategory === 'settings'
+                    ? 'Search settings, theme, vault...'
+                    : activeCategory === 'todo'
+                    ? 'Search todos and tasks...'
+                    : activeCategory === 'safe'
+                    ? 'Search safe vault and keys...'
+                    : activeCategory === 'diary'
+                    ? 'Search diary entries...'
+                    : 'Search notes, ideas, tags...'
+                }
                 className={`w-full bg-transparent text-sm font-medium focus:outline-none ${
                   isDark
                     ? 'text-white placeholder:text-neutral-500'
@@ -190,9 +369,9 @@ export function SearchDrawer({
               )}
             </div>
 
-            {/* Filter Chips: all, todo, safe, diary, notes */}
+            {/* Filter Chips: dynamically ordered so current page's category is first */}
             <div className="flex items-center gap-2 mb-3 overflow-x-auto no-scrollbar py-0.5">
-              {CATEGORY_CHIPS.map((chip) => {
+              {orderedChips.map((chip) => {
                 const isActive = activeCategory === chip.id;
                 return (
                   <button
@@ -221,6 +400,71 @@ export function SearchDrawer({
 
             {/* Results list or Empty Suggestions */}
             <div className="flex-1 overflow-y-auto no-scrollbar space-y-2 min-h-[160px] max-h-[42vh] pr-0.5">
+              {/* Settings results when in Settings category OR matching in All */}
+              {filteredSettings.length > 0 && (
+                <div className="space-y-1.5 pb-2">
+                  <div
+                    className={`text-[11px] font-semibold tracking-wider uppercase px-1 pt-1 flex items-center justify-between ${
+                      isDark ? 'text-neutral-500' : 'text-neutral-400'
+                    }`}
+                  >
+                    <span>Settings ({filteredSettings.length})</span>
+                    {activeCategory !== 'settings' && (
+                      <span className="text-[10px] text-emerald-500 font-medium">Quick actions</span>
+                    )}
+                  </div>
+
+                  {filteredSettings.map((item) => {
+                    const IconComp = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={item.action}
+                        className={`w-full flex items-center justify-between p-3 rounded-2xl cursor-pointer active:scale-[0.99] transition-all text-left ${
+                          isDark
+                            ? 'bg-[#181818] hover:bg-[#202020]'
+                            : 'bg-[#f4f5f8] hover:bg-[#eceef2]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                              isDark ? 'bg-[#242424] text-neutral-200' : 'bg-neutral-200/70 text-neutral-700'
+                            }`}
+                          >
+                            <IconComp className="w-4 h-4 stroke-[2]" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs sm:text-sm font-semibold truncate block">
+                                {item.title}
+                              </span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.2 rounded-full font-medium ${
+                                  isDark ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-200 text-neutral-600'
+                                }`}
+                              >
+                                {item.badge}
+                              </span>
+                            </div>
+                            <p
+                              className={`text-[11px] truncate ${
+                                isDark ? 'text-neutral-400' : 'text-neutral-500'
+                              }`}
+                            >
+                              {item.description}
+                            </p>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-neutral-400 shrink-0 ml-2" />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Notes Results */}
               {filteredNotes.length > 0 ? (
                 <div className="space-y-2">
                   <div
@@ -228,7 +472,7 @@ export function SearchDrawer({
                       isDark ? 'text-neutral-500' : 'text-neutral-400'
                     }`}
                   >
-                    {query ? `Matches (${filteredNotes.length})` : 'Notes'}
+                    {query ? `Notes (${filteredNotes.length})` : 'Notes'}
                   </div>
 
                   {filteredNotes.map((note) => {
@@ -242,8 +486,8 @@ export function SearchDrawer({
                         tabIndex={0}
                         className={`p-3.5 rounded-2xl cursor-pointer active:scale-[0.99] transition-all text-left ${
                           isDark
-                            ? 'bg-[#1a1a1a] hover:bg-[#222222]'
-                            : 'bg-[#f6f7fa] hover:bg-[#eceef2]'
+                            ? 'bg-[#181818] hover:bg-[#202020]'
+                            : 'bg-[#f4f5f8] hover:bg-[#eceef2]'
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">
@@ -301,8 +545,8 @@ export function SearchDrawer({
                     );
                   })}
                 </div>
-              ) : query ? (
-                /* No matches found */
+              ) : query && filteredSettings.length === 0 ? (
+                /* No matches found in either notes or settings */
                 <div className="py-8 flex flex-col items-center justify-center text-center">
                   <div
                     className={`w-11 h-11 rounded-full flex items-center justify-center mb-3 ${
@@ -312,27 +556,31 @@ export function SearchDrawer({
                     <Search className="w-5 h-5" />
                   </div>
                   <p className="text-sm font-medium">No results for &ldquo;{query}&rdquo;</p>
-                  <p
-                    className={`text-xs mt-1 max-w-[220px] ${
-                      isDark ? 'text-neutral-500' : 'text-neutral-400'
-                    }`}
-                  >
-                    Would you like to start a new note with this title?
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleCreateNew}
-                    className={`mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold active:scale-95 transition-all shadow-sm ${
-                      isDark
-                        ? 'bg-white text-black hover:bg-neutral-200'
-                        : 'bg-black text-white hover:bg-neutral-800'
-                    }`}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Create &ldquo;{query}&rdquo;</span>
-                  </button>
+                  {activeCategory !== 'settings' && (
+                    <>
+                      <p
+                        className={`text-xs mt-1 max-w-[220px] ${
+                          isDark ? 'text-neutral-500' : 'text-neutral-400'
+                        }`}
+                      >
+                        Would you like to start a new note with this title?
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleCreateNew}
+                        className={`mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold active:scale-95 transition-all shadow-sm ${
+                          isDark
+                            ? 'bg-white text-black hover:bg-neutral-200'
+                            : 'bg-black text-white hover:bg-neutral-800'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Create &ldquo;{query}&rdquo;</span>
+                      </button>
+                    </>
+                  )}
                 </div>
-              ) : (
+              ) : !query && filteredSettings.length === 0 ? (
                 /* Empty query state with quick suggestions & tags */
                 <div className="py-4 space-y-4">
                   <div>
@@ -352,8 +600,8 @@ export function SearchDrawer({
                           onClick={() => setQuery(tag)}
                           className={`px-3 py-1.5 rounded-xl text-xs font-medium active:scale-95 transition-all ${
                             isDark
-                              ? 'bg-[#1a1a1a] text-neutral-300 hover:bg-[#222222]'
-                              : 'bg-[#f3f4f7] text-neutral-700 hover:bg-[#eaebef]'
+                              ? 'bg-[#181818] text-neutral-300 hover:bg-[#202020]'
+                              : 'bg-[#f4f5f8] text-neutral-700 hover:bg-[#eceef2]'
                           }`}
                         >
                           #{tag}
@@ -377,11 +625,11 @@ export function SearchDrawer({
                         isDark ? 'text-neutral-400' : 'text-neutral-500'
                       }`}
                     >
-                      Quick search across titles, note content, and favorite items.
+                      Quick search across titles, note content, and settings.
                     </p>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </motion.div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   KeyRound,
@@ -128,7 +128,7 @@ export function PassKeyDrawer({
     };
   }, []);
 
-  const handleFieldDocChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFieldDocChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -154,7 +154,7 @@ export function PassKeyDrawer({
     }
   };
 
-  const handleFieldImgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFieldImgChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -1475,20 +1475,13 @@ export function PassKeyDrawer({
                                   : 'bg-neutral-100/80'
                               }`}
                             >
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center justify-between gap-2 mb-2">
                                 <div className="flex items-center gap-2 min-w-0">
                                   <div
                                     className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${meta.iconClasses}`}
                                   >
                                     <FieldIcon className="w-3.5 h-3.5 stroke-[2]" />
                                   </div>
-                                  <span
-                                    className={`text-[11px] font-semibold uppercase tracking-wider truncate ${
-                                      isDark ? 'text-neutral-300' : 'text-neutral-700'
-                                    }`}
-                                  >
-                                    {field.label}
-                                  </span>
                                   <span
                                     className={`text-[9.5px] px-1.5 py-0.5 rounded-md font-medium shrink-0 ${meta.badgeClasses}`}
                                   >
@@ -1520,23 +1513,25 @@ export function PassKeyDrawer({
                                   <button
                                     type="button"
                                     onClick={() => handleCopy(field.value, field.id)}
-                                    className={`h-6 px-2 rounded-lg flex items-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
+                                    className={`h-6 w-6 sm:w-auto px-0 sm:px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
                                       copiedKey === field.id
                                         ? 'bg-emerald-500/20 text-emerald-400'
                                         : isDark
                                         ? 'bg-[#262626] hover:bg-[#303030] text-neutral-300'
                                         : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
                                     }`}
+                                    title={copiedKey === field.id ? 'Copied' : 'Copy'}
+                                    aria-label={copiedKey === field.id ? 'Copied' : 'Copy'}
                                   >
                                     {copiedKey === field.id ? (
                                       <>
                                         <Check className="w-3 h-3 text-emerald-400" />
-                                        <span>Copied</span>
+                                        <span className="hidden sm:inline">Copied</span>
                                       </>
                                     ) : (
                                       <>
                                         <Copy className="w-3 h-3" />
-                                        <span>Copy</span>
+                                        <span className="hidden sm:inline">Copy</span>
                                       </>
                                     )}
                                   </button>
@@ -1626,8 +1621,19 @@ export function PassKeyDrawer({
                                 </div>
                               </div>
 
+                              {/* Title text on its own row to eliminate truncation and overlap */}
+                              <div className="mb-1.5 px-0.5">
+                                <span
+                                  className={`text-xs font-semibold uppercase tracking-wider block break-words ${
+                                    isDark ? 'text-neutral-300' : 'text-neutral-700'
+                                  }`}
+                                >
+                                  {field.label}
+                                </span>
+                              </div>
+
                               <div
-                                className={`text-sm font-mono tracking-wider break-all select-all font-semibold ${
+                                className={`text-sm font-mono tracking-wider break-all select-all font-semibold px-0.5 ${
                                   isDark ? 'text-white' : 'text-neutral-900'
                                 }`}
                               >
@@ -1811,23 +1817,25 @@ export function PassKeyDrawer({
                           <button
                             type="button"
                             onClick={() => handleCopy(email, 'username')}
-                            className={`h-6 px-2 rounded-lg flex items-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
+                            className={`h-6 w-6 sm:w-auto px-0 sm:px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
                               copiedKey === 'username'
                                 ? 'bg-emerald-500/20 text-emerald-400'
                                 : isDark
                                 ? 'bg-[#262626] hover:bg-[#303030] text-neutral-300'
                                 : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
                             }`}
+                            title={copiedKey === 'username' ? 'Copied' : 'Copy'}
+                            aria-label={copiedKey === 'username' ? 'Copied' : 'Copy'}
                           >
                             {copiedKey === 'username' ? (
                               <>
                                 <Check className="w-3 h-3 text-emerald-400" />
-                                <span>Copied</span>
+                                <span className="hidden sm:inline">Copied</span>
                               </>
                             ) : (
                               <>
                                 <Copy className="w-3 h-3" />
-                                <span>Copy</span>
+                                <span className="hidden sm:inline">Copy</span>
                               </>
                             )}
                           </button>
@@ -1886,23 +1894,25 @@ export function PassKeyDrawer({
                             <button
                               type="button"
                               onClick={() => handleCopy(password, 'password')}
-                              className={`h-6 px-2 rounded-lg flex items-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
+                              className={`h-6 w-6 sm:w-auto px-0 sm:px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
                                 copiedKey === 'password'
                                   ? 'bg-emerald-500/20 text-emerald-400'
                                   : isDark
                                   ? 'bg-[#262626] hover:bg-[#303030] text-neutral-300'
                                   : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
                               }`}
+                              title={copiedKey === 'password' ? 'Copied' : 'Copy'}
+                              aria-label={copiedKey === 'password' ? 'Copied' : 'Copy'}
                             >
                               {copiedKey === 'password' ? (
                                 <>
                                   <Check className="w-3 h-3 text-emerald-400" />
-                                  <span>Copied</span>
+                                  <span className="hidden sm:inline">Copied</span>
                                 </>
                               ) : (
                                 <>
                                   <Copy className="w-3 h-3" />
-                                  <span>Copy</span>
+                                  <span className="hidden sm:inline">Copy</span>
                                 </>
                               )}
                             </button>
@@ -2153,23 +2163,25 @@ export function PassKeyDrawer({
                       <button
                         type="button"
                         onClick={() => handleCopy(secretNotes, 'notes')}
-                        className={`h-6 px-2 rounded-lg flex items-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
+                        className={`h-6 w-6 sm:w-auto px-0 sm:px-2 rounded-lg flex items-center justify-center gap-1 text-[11px] font-medium active:scale-95 transition-all ${
                           copiedKey === 'notes'
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : isDark
                             ? 'bg-[#262626] hover:bg-[#303030] text-neutral-300'
                             : 'bg-neutral-200 hover:bg-neutral-300 text-neutral-800'
                         }`}
+                        title={copiedKey === 'notes' ? 'Copied' : 'Copy'}
+                        aria-label={copiedKey === 'notes' ? 'Copied' : 'Copy'}
                       >
                         {copiedKey === 'notes' ? (
                           <>
                             <Check className="w-3 h-3 text-emerald-400" />
-                            <span>Copied</span>
+                            <span className="hidden sm:inline">Copied</span>
                           </>
                         ) : (
                           <>
                             <Copy className="w-3 h-3" />
-                            <span>Copy</span>
+                            <span className="hidden sm:inline">Copy</span>
                           </>
                         )}
                       </button>
