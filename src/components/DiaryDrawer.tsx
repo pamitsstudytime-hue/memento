@@ -29,6 +29,10 @@ import {
   Maximize2,
   ChevronsLeft,
   ChevronsRight,
+  ArrowUpDown,
+  Scaling,
+  Grid2x2,
+  Grid3x3,
 } from 'lucide-react';
 import { ThemeMode, NoteItem, VoiceNoteAttachment } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
@@ -165,6 +169,11 @@ export function DiaryDrawer({
   const [currentDate, setCurrentDate] = useState(() => formatDateToISO(new Date()));
   const [currentMood, setCurrentMood] = useState<string | undefined>(undefined);
   const [images, setImages] = useState<string[]>([]);
+  const [imageHeight, setImageHeight] = useState<number>(() => note?.imageHeight || 340);
+  const [imageWidthPercent, setImageWidthPercent] = useState<number>(() => note?.imageWidthPercent || 100);
+  const [imageFit, setImageFit] = useState<'cover' | 'contain'>(() => note?.imageFit || 'cover');
+  const [isResizingImage, setIsResizingImage] = useState(false);
+  const [imageGridCols, setImageGridCols] = useState<1 | 2 | 3>(2);
   const [voiceNotes, setVoiceNotes] = useState<VoiceNoteAttachment[]>([]);
 
   // UI state
@@ -243,6 +252,9 @@ export function DiaryDrawer({
           ? [note.imageUrl]
           : [];
       setImages(imgs);
+      setImageHeight(note.imageHeight || 340);
+      setImageWidthPercent(note.imageWidthPercent || 100);
+      setImageFit(note.imageFit || 'cover');
 
       const vns =
         note.voiceNotes && note.voiceNotes.length > 0
@@ -910,6 +922,9 @@ export function DiaryDrawer({
       todayDate: currentDate,
       mood: currentMood,
       images,
+      imageHeight,
+      imageWidthPercent,
+      imageFit,
       voiceNotes,
       hasVoiceNote: voiceNotes.length > 0,
       voiceAudioUrl: voiceNotes[0]?.audioUrl,
@@ -950,6 +965,52 @@ export function DiaryDrawer({
     setIsSavedJustNow(false);
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Interactive drag resize handler for attached image(s)
+  const handleStartImageResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizingImage(true);
+    triggerHaptic('light');
+
+    const pointerId = e.pointerId;
+    const target = e.currentTarget;
+    try {
+      target.setPointerCapture(pointerId);
+    } catch {
+      // ignore
+    }
+
+    const startY = e.clientY;
+    const startHeight = imageHeight;
+
+    const handlePointerMove = (moveEv: PointerEvent) => {
+      if (moveEv.pointerId !== pointerId) return;
+      const deltaY = moveEv.clientY - startY;
+      const nextH = Math.max(140, Math.min(720, Math.round(startHeight + deltaY)));
+      setImageHeight(nextH);
+      setIsSavedJustNow(false);
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+
+    const handlePointerUp = (upEv: PointerEvent) => {
+      if (upEv.pointerId !== pointerId) return;
+      setIsResizingImage(false);
+      triggerHaptic('selection');
+      try {
+        target.releasePointerCapture(pointerId);
+      } catch {
+        // ignore
+      }
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerUp);
   };
 
   // Voice recording toggle
@@ -1788,68 +1849,281 @@ export function DiaryDrawer({
                 )}
               </div>
 
-              {/* Attached Photos (with gorgeous rounded corners matching Image 2 reference) */}
+              {/* Attached Photos (with interactive resizing, width options & gorgeous rounded corners) */}
               {images.length > 0 && (
                 <div className="my-2 space-y-2">
                   {images.length === 1 ? (
-                    <div className="relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border border-neutral-200/80 dark:border-white/10 shadow-sm sm:shadow-md group bg-neutral-900/5 dark:bg-neutral-900/50">
-                      <img
-                        src={images[0]}
-                        alt="Diary visual memory"
-                        onClick={() => setLightboxSrc(images[0])}
-                        className="w-full max-h-[360px] sm:max-h-[440px] object-cover cursor-pointer transition-transform duration-500 group-hover:scale-[1.01]"
-                        loading="lazy"
-                      />
-                      {/* Floating actions on photo */}
-                      <div className="absolute top-3 right-3 flex items-center gap-2 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={() => setLightboxSrc(images[0])}
-                          className="w-8 h-8 rounded-full bg-black/65 hover:bg-black/85 text-white backdrop-blur-md flex items-center justify-center transition-all cursor-pointer shadow-md"
-                          title="View full size"
+                    <div
+                      className="relative mx-auto transition-[width] duration-200"
+                      style={{
+                        width: `${imageWidthPercent}%`,
+                        maxWidth: '100%',
+                      }}
+                    >
+                      <div
+                        className={`relative w-full rounded-2xl sm:rounded-3xl overflow-hidden border transition-all duration-150 group select-none ${
+                          isResizingImage
+                            ? 'ring-2 ring-purple-500 shadow-xl border-purple-500/50'
+                            : 'border-neutral-200/80 dark:border-white/10 shadow-sm sm:shadow-md'
+                        } bg-neutral-900/5 dark:bg-neutral-900/50`}
+                        style={{
+                          height: `${imageHeight}px`,
+                        }}
+                      >
+                        <img
+                          src={images[0]}
+                          alt="Diary visual memory"
+                          onClick={() => !isResizingImage && setLightboxSrc(images[0])}
+                          className="w-full h-full cursor-pointer transition-transform duration-300 group-hover:scale-[1.01]"
+                          style={{ objectFit: imageFit }}
+                          loading="lazy"
+                        />
+
+                        {/* Top floating control toolbar */}
+                        <div className="absolute top-2.5 inset-x-2.5 flex items-center justify-between gap-2 z-10 pointer-events-none">
+                          {/* Quick Height & Width Presets Pill */}
+                          <div className="flex items-center gap-1 p-1 rounded-full bg-black/60 hover:bg-black/85 backdrop-blur-md text-white shadow-lg pointer-events-auto transition-opacity opacity-90 sm:opacity-0 group-hover:opacity-100">
+                            {/* Height Presets */}
+                            {(
+                              [
+                                { label: 'S', h: 180, title: 'Small (180px)' },
+                                { label: 'M', h: 320, title: 'Medium (320px)' },
+                                { label: 'L', h: 460, title: 'Large (460px)' },
+                              ] as const
+                            ).map((preset) => (
+                              <button
+                                key={preset.label}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  triggerHaptic('light');
+                                  setImageHeight(preset.h);
+                                  setIsSavedJustNow(false);
+                                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                }}
+                                className={`w-6 h-6 rounded-full text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center ${
+                                  Math.abs(imageHeight - preset.h) < 30
+                                    ? 'bg-purple-600 text-white shadow-xs'
+                                    : 'hover:bg-white/20 text-white/80'
+                                }`}
+                                title={preset.title}
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+
+                            <div className="w-px h-3.5 bg-white/20 my-auto" />
+
+                            {/* Width Presets */}
+                            {(
+                              [
+                                { label: '50%', w: 50 },
+                                { label: '75%', w: 75 },
+                                { label: '100%', w: 100 },
+                              ] as const
+                            ).map((wp) => (
+                              <button
+                                key={wp.label}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  triggerHaptic('light');
+                                  setImageWidthPercent(wp.w);
+                                  setIsSavedJustNow(false);
+                                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                }}
+                                className={`px-1.5 h-6 rounded-full text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center ${
+                                  imageWidthPercent === wp.w
+                                    ? 'bg-purple-600 text-white shadow-xs'
+                                    : 'hover:bg-white/20 text-white/80'
+                                }`}
+                                title={`Width: ${wp.label}`}
+                              >
+                                {wp.label}
+                              </button>
+                            ))}
+
+                            <div className="w-px h-3.5 bg-white/20 my-auto" />
+
+                            {/* Fit / Cover toggle */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                triggerHaptic('light');
+                                setImageFit((prev) => (prev === 'cover' ? 'contain' : 'cover'));
+                                setIsSavedJustNow(false);
+                                if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                              }}
+                              className="px-1.5 h-6 rounded-full text-[10px] font-bold transition-all cursor-pointer flex items-center justify-center hover:bg-white/20 text-white/80"
+                              title={imageFit === 'cover' ? 'Switch to Fit (show full photo)' : 'Switch to Cover (fill container)'}
+                            >
+                              {imageFit === 'cover' ? 'Fit' : 'Cover'}
+                            </button>
+                          </div>
+
+                          {/* Right actions: Lightbox + Delete */}
+                          <div className="flex items-center gap-1.5 pointer-events-auto opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxSrc(images[0]);
+                              }}
+                              className="w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 text-white backdrop-blur-md flex items-center justify-center transition-all cursor-pointer shadow-md"
+                              title="View full size"
+                            >
+                              <Maximize2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemovePhoto(0);
+                              }}
+                              className="w-7 h-7 rounded-full bg-black/60 hover:bg-rose-600 text-white backdrop-blur-md flex items-center justify-center transition-all cursor-pointer shadow-md"
+                              title="Remove photo"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Bottom Drag Handle for Interactive Height Resizing */}
+                        <div
+                          onPointerDown={handleStartImageResize}
+                          className={`absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full backdrop-blur-md shadow-lg transition-all cursor-ns-resize touch-none select-none z-20 ${
+                            isResizingImage
+                              ? 'bg-purple-600 text-white scale-105 shadow-purple-500/40'
+                              : 'bg-black/65 hover:bg-black/85 text-white/90 opacity-90 sm:opacity-75 group-hover:opacity-100 hover:scale-105'
+                          }`}
+                          title="Drag up or down to resize image"
                         >
-                          <Maximize2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemovePhoto(0);
-                          }}
-                          className="w-8 h-8 rounded-full bg-black/65 hover:bg-rose-600 text-white backdrop-blur-md flex items-center justify-center transition-all cursor-pointer shadow-md"
-                          title="Remove photo"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                          <ArrowUpDown className="w-3 h-3 text-purple-300" />
+                          <span className="text-[10px] font-bold font-mono tracking-tight">{imageHeight}px</span>
+                          <span className="text-[9px] text-white/60 hidden sm:inline">• Drag to resize</span>
+                        </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {images.map((imgSrc, idx) => (
-                        <div
-                          key={`attached-img-${idx}`}
-                          className="relative aspect-4/3 rounded-2xl sm:rounded-2xl overflow-hidden border border-neutral-200/80 dark:border-white/10 shadow-xs group bg-neutral-900/5 dark:bg-neutral-900/50"
-                        >
-                          <img
-                            src={imgSrc}
-                            alt={`Attachment ${idx + 1}`}
-                            onClick={() => setLightboxSrc(imgSrc)}
-                            className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
-                            loading="lazy"
-                          />
+                    <div className="space-y-2">
+                      {/* Grid controls bar */}
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-1 bg-neutral-100 dark:bg-neutral-800/80 p-0.5 rounded-lg border border-neutral-200/50 dark:border-white/5">
                           <button
                             type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemovePhoto(idx);
-                            }}
-                            className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-xs"
-                            title="Remove photo"
+                            onClick={() => setImageGridCols(1)}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
+                              imageGridCols === 1
+                                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
+                                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                            }`}
                           >
-                            <X className="w-3.5 h-3.5" />
+                            1 Col
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setImageGridCols(2)}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
+                              imageGridCols === 2
+                                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
+                                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                            }`}
+                          >
+                            2 Cols
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setImageGridCols(3)}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
+                              imageGridCols === 3
+                                ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-2xs'
+                                : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white'
+                            }`}
+                          >
+                            3 Cols
                           </button>
                         </div>
-                      ))}
+
+                        {/* Height Presets for Grid */}
+                        <div className="flex items-center gap-1">
+                          {(
+                            [
+                              { label: 'Compact', h: 160 },
+                              { label: 'Medium', h: 240 },
+                              { label: 'Large', h: 360 },
+                            ] as const
+                          ).map((pr) => (
+                            <button
+                              key={pr.label}
+                              type="button"
+                              onClick={() => {
+                                triggerHaptic('light');
+                                setImageHeight(pr.h);
+                              }}
+                              className={`px-2 py-0.5 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
+                                Math.abs(imageHeight - pr.h) < 30
+                                  ? 'bg-purple-600 text-white'
+                                  : isDark
+                                  ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
+                                  : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+                              }`}
+                            >
+                              {pr.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Image Grid */}
+                      <div
+                        className={`grid gap-2.5 ${
+                          imageGridCols === 1
+                            ? 'grid-cols-1'
+                            : imageGridCols === 3
+                            ? 'grid-cols-2 sm:grid-cols-3'
+                            : 'grid-cols-2'
+                        }`}
+                      >
+                        {images.map((imgSrc, idx) => (
+                          <div
+                            key={`attached-img-${idx}`}
+                            style={{ height: `${imageHeight}px` }}
+                            className="relative rounded-2xl overflow-hidden border border-neutral-200/80 dark:border-white/10 shadow-xs group bg-neutral-900/5 dark:bg-neutral-900/50"
+                          >
+                            <img
+                              src={imgSrc}
+                              alt={`Attachment ${idx + 1}`}
+                              onClick={() => setLightboxSrc(imgSrc)}
+                              className="w-full h-full object-cover cursor-pointer group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRemovePhoto(idx);
+                              }}
+                              className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/70 hover:bg-rose-600 text-white flex items-center justify-center opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all cursor-pointer shadow-xs"
+                              title="Remove photo"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Drag handle for grid */}
+                      <div className="flex justify-center pt-1">
+                        <div
+                          onPointerDown={handleStartImageResize}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-700 shadow-2xs cursor-ns-resize select-none touch-none text-[10px] font-medium"
+                          title="Drag to adjust grid photo height"
+                        >
+                          <ArrowUpDown className="w-3 h-3 text-purple-500" />
+                          <span>Height: {imageHeight}px (Drag to resize)</span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
