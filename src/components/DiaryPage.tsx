@@ -33,7 +33,7 @@ import { triggerHaptic } from '../lib/capacitor';
 import { DiaryDrawer } from './DiaryDrawer';
 import { DiaryDayDrawer } from './DiaryDayDrawer';
 import { ImageLightbox } from './ImageLightbox';
-import { formatDiaryHeaderDate, stripHtml } from '../lib/formatters';
+import { formatDiaryHeaderDate, stripHtml, parseNoteDateToISO, formatDateToISO } from '../lib/formatters';
 import { cleanNoteTextForPreview } from './EmptyBody';
 
 export type DiaryTab = 'inbox' | 'calendar' | 'moments';
@@ -50,27 +50,16 @@ interface DiaryPageProps {
   onToggleFavorite?: (id: string) => void;
 }
 
-// Helper: Format Date to YYYY-MM-DD
-function formatDateToISO(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
 // Helper: Normalize note date to YYYY-MM-DD
 function getNoteDateISO(note: NoteItem): string {
   if (note.todayDate && /^\d{4}-\d{2}-\d{2}$/.test(note.todayDate)) {
+    if (note.todayDate.startsWith('2001-')) {
+      return `${new Date().getFullYear()}${note.todayDate.slice(4)}`;
+    }
     return note.todayDate;
   }
-  if (note.date && /^\d{4}-\d{2}-\d{2}$/.test(note.date)) {
-    return note.date;
-  }
   if (note.date) {
-    const parsed = new Date(note.date);
-    if (!isNaN(parsed.getTime())) {
-      return formatDateToISO(parsed);
-    }
+    return parseNoteDateToISO(note.date);
   }
   // Try parsing from id timestamp if available
   const parts = note.id.split('-');

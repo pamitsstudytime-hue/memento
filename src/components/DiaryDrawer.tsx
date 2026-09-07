@@ -27,10 +27,12 @@ import {
   Type,
   Palette,
   Maximize2,
+  ChevronsLeft,
+  ChevronsRight,
 } from 'lucide-react';
 import { ThemeMode, NoteItem, VoiceNoteAttachment } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
-import { formatDiaryHeaderDate, stripHtml } from '../lib/formatters';
+import { formatDiaryHeaderDate, stripHtml, parseNoteDateToISO, formatDateToISO } from '../lib/formatters';
 import { ImageLightbox } from './ImageLightbox';
 import { useIsDesktop } from '../hooks/useIsDesktop';
 import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
@@ -66,6 +68,11 @@ const MOOD_OPTIONS = [
   { emoji: '🥰', label: 'Loved' },
   { emoji: '😴', label: 'Tired' },
   { emoji: '🌧️', label: 'Melancholy' },
+];
+
+const CALENDAR_MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
 ];
 
 const JOURNALING_PROMPTS = [
@@ -196,6 +203,7 @@ export function DiaryDrawer({
 
   // Calendar popover navigation state
   const [calNavDate, setCalNavDate] = useState(() => new Date());
+  const [calMode, setCalMode] = useState<'days' | 'monthYear'>('days');
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -229,10 +237,8 @@ export function DiaryDrawer({
       if (editorRef.current) {
         editorRef.current.innerHTML = formatted;
       }
-      const noteDate =
-        note.date && /^\d{4}-\d{2}-\d{2}$/.test(note.date)
-          ? note.date
-          : formatDateToISO(new Date(note.date || Date.now()));
+      const rawDate = note.todayDate || note.date;
+      const noteDate = parseNoteDateToISO(rawDate);
       setCurrentDate(noteDate);
       setCurrentMood(note.mood);
 
@@ -266,6 +272,7 @@ export function DiaryDrawer({
       } catch {
         setCalNavDate(new Date());
       }
+      setCalMode('days');
     }
   }, [note, isOpen]);
 
@@ -372,11 +379,12 @@ export function DiaryDrawer({
   // Date breakdown matching reference screenshot: Day number (28), Day of week (Fri), Year.Month (2026.8)
   const parsedDate = useMemo(() => {
     try {
-      const [y, m, d] = currentDate.split('-').map(Number);
+      const iso = parseNoteDateToISO(currentDate);
+      const [y, m, d] = iso.split('-').map(Number);
       const dt = new Date(y, m - 1, d);
       const dayNum = d;
       const weekday = dt.toLocaleDateString('en-US', { weekday: 'short' });
-      const yearMonth = `${y}.${m}`;
+      const yearMonth = `${dt.getFullYear()}.${dt.getMonth() + 1}`;
       return { dayNum, weekday, yearMonth };
     } catch {
       const dt = new Date();
@@ -903,6 +911,7 @@ export function DiaryDrawer({
       title: title.trim(),
       content: finalContent,
       date: currentDate,
+      todayDate: currentDate,
       mood: currentMood,
       images,
       voiceNotes,
@@ -1116,6 +1125,14 @@ export function DiaryDrawer({
                     type="button"
                     onClick={() => {
                       triggerHaptic('selection');
+                      if (!isCalendarOpen) {
+                        const iso = parseNoteDateToISO(currentDate);
+                        const [y, m, d] = iso.split('-').map(Number);
+                        if (!isNaN(y) && !isNaN(m)) {
+                          setCalNavDate(new Date(y, m - 1, d || 1));
+                        }
+                        setCalMode('days');
+                      }
                       setIsCalendarOpen((prev) => !prev);
                     }}
                     className="group flex items-center gap-2.5 px-2.5 py-1.5 -ml-2 rounded-2xl hover:bg-neutral-100 dark:hover:bg-white/5 transition-all text-left cursor-pointer active:scale-98 select-none"
@@ -1157,29 +1174,70 @@ export function DiaryDrawer({
                             : 'bg-white border-neutral-200 text-neutral-900 shadow-xl'
                         }`}
                       >
-                        {/* Calendar Month Navigation */}
+                        {/* Calendar Header with Month/Year Toggle and Navigation */}
                         <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-sm font-bold tracking-tight">
-                            {calNavDate.toLocaleDateString('en-US', {
-                              month: 'long',
-                              year: 'numeric',
-                            })}
-                          </h4>
-                          <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              triggerHaptic('light');
+                              setCalMode((m) => (m === 'days' ? 'monthYear' : 'days'));
+                            }}
+                            className={`flex items-center gap-1.5 px-2 py-1 -ml-1 rounded-lg text-sm font-bold tracking-tight transition-colors cursor-pointer ${
+                              isDark ? 'hover:bg-neutral-800 text-white' : 'hover:bg-neutral-100 text-neutral-900'
+                            }`}
+                            title={calMode === 'days' ? 'Click to select month or year' : 'Back to calendar days'}
+                          >
+                            <span>
+                              {calNavDate.toLocaleDateString('en-US', {
+                                month: 'long',
+                                year: 'numeric',
+                              })}
+                            </span>
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-neutral-400 transition-transform ${
+                                calMode === 'monthYear' ? 'rotate-180 text-purple-500' : ''
+                              }`}
+                            />
+                          </button>
+
+                          <div className="flex items-center gap-0.5">
+                            {/* Fast Year Back */}
                             <button
                               type="button"
                               onClick={() => {
                                 triggerHaptic('light');
                                 setCalNavDate(
-                                  (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                                  (prev) => new Date(prev.getFullYear() - 1, prev.getMonth(), 1)
                                 );
                               }}
                               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                isDark ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-600'
+                                isDark ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white' : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
                               }`}
+                              title="Previous year"
                             >
-                              <ChevronLeft className="w-4 h-4" />
+                              <ChevronsLeft className="w-4 h-4" />
                             </button>
+
+                            {/* Month Back (when in days mode) */}
+                            {calMode === 'days' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('light');
+                                  setCalNavDate(
+                                    (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                                  );
+                                }}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  isDark ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white' : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                                }`}
+                                title="Previous month"
+                              >
+                                <ChevronLeft className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {/* Today button */}
                             <button
                               type="button"
                               onClick={() => {
@@ -1189,80 +1247,171 @@ export function DiaryDrawer({
                                 const now = new Date();
                                 setCalNavDate(new Date(now.getFullYear(), now.getMonth(), 1));
                                 setCurrentDate(formatDateToISO(now));
+                                setCalMode('days');
                                 setIsCalendarOpen(false);
                               }}
                               className={`text-[11px] px-2 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
                                 isDark ? 'hover:bg-neutral-800 text-purple-400' : 'hover:bg-neutral-100 text-purple-600'
                               }`}
+                              title="Jump to today"
                             >
                               Today
                             </button>
+
+                            {/* Month Forward (when in days mode) */}
+                            {calMode === 'days' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('light');
+                                  setCalNavDate(
+                                    (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                                  );
+                                }}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  isDark ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white' : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                                }`}
+                                title="Next month"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            )}
+
+                            {/* Fast Year Forward */}
                             <button
                               type="button"
                               onClick={() => {
                                 triggerHaptic('light');
                                 setCalNavDate(
-                                  (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                                  (prev) => new Date(prev.getFullYear() + 1, prev.getMonth(), 1)
                                 );
                               }}
                               className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                isDark ? 'hover:bg-neutral-800 text-neutral-400' : 'hover:bg-neutral-100 text-neutral-600'
+                                isDark ? 'hover:bg-neutral-800 text-neutral-400 hover:text-white' : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
                               }`}
+                              title="Next year"
                             >
-                              <ChevronRight className="w-4 h-4" />
+                              <ChevronsRight className="w-4 h-4" />
                             </button>
                           </div>
                         </div>
 
-                        {/* Weekday headers */}
-                        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-neutral-400 mb-2">
-                          <span>M</span>
-                          <span>T</span>
-                          <span>W</span>
-                          <span>T</span>
-                          <span>F</span>
-                          <span>S</span>
-                          <span>S</span>
-                        </div>
-
-                        {/* Days Grid */}
-                        <div className="grid grid-cols-7 gap-1">
-                          {calendarDays.map((cell, idx) => {
-                            const isSelected = cell.dateStr === currentDate;
-                            const isToday = cell.dateStr === formatDateToISO(new Date());
-
-                            return (
+                        {calMode === 'monthYear' ? (
+                          /* Quick Month & Year Selector View */
+                          <div className="py-1">
+                            {/* Year Stepper Bar */}
+                            <div className="flex items-center justify-between mb-3 px-3 py-1.5 rounded-xl bg-neutral-100 dark:bg-neutral-800/70 border border-neutral-200/50 dark:border-neutral-700/50">
                               <button
-                                key={`cal-day-${idx}-${cell.dateStr}`}
                                 type="button"
                                 onClick={() => {
-                                  triggerHaptic('selection');
-                                  setIsSavedJustNow(false);
-                                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                                  setCurrentDate(cell.dateStr);
-                                  setIsCalendarOpen(false);
+                                  triggerHaptic('light');
+                                  setCalNavDate((prev) => new Date(prev.getFullYear() - 1, prev.getMonth(), 1));
                                 }}
-                                className={`h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-purple-600 text-white shadow-xs'
-                                    : isToday
-                                    ? isDark
-                                      ? 'border border-purple-500/50 text-purple-300 hover:bg-purple-500/10'
-                                      : 'border border-purple-400 text-purple-700 hover:bg-purple-50'
-                                    : cell.isCurrentMonth
-                                    ? isDark
-                                      ? 'hover:bg-neutral-800 text-neutral-200'
-                                      : 'hover:bg-neutral-100 text-neutral-800'
-                                    : isDark
-                                    ? 'text-neutral-600 hover:bg-neutral-800/40'
-                                    : 'text-neutral-400 hover:bg-neutral-100/50'
-                                }`}
+                                className="p-1 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 cursor-pointer"
+                                title="Previous year"
                               >
-                                {cell.dayNum}
+                                <ChevronLeft className="w-4 h-4" />
                               </button>
-                            );
-                          })}
-                        </div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-neutral-400">Year:</span>
+                                <span className="font-mono font-bold text-base text-neutral-900 dark:text-white">
+                                  {calNavDate.getFullYear()}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic('light');
+                                  setCalNavDate((prev) => new Date(prev.getFullYear() + 1, prev.getMonth(), 1));
+                                }}
+                                className="p-1 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-600 dark:text-neutral-300 cursor-pointer"
+                                title="Next year"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* 12 Months Grid */}
+                            <div className="grid grid-cols-3 gap-2">
+                              {CALENDAR_MONTHS.map((mName, mIdx) => {
+                                const isCurrentMonth = calNavDate.getMonth() === mIdx;
+                                return (
+                                  <button
+                                    key={`month-picker-${mName}`}
+                                    type="button"
+                                    onClick={() => {
+                                      triggerHaptic('selection');
+                                      setCalNavDate((prev) => new Date(prev.getFullYear(), mIdx, 1));
+                                      setCalMode('days');
+                                    }}
+                                    className={`py-2 px-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                                      isCurrentMonth
+                                        ? 'bg-purple-600 text-white shadow-xs'
+                                        : isDark
+                                        ? 'bg-neutral-800/60 hover:bg-neutral-800 text-neutral-200'
+                                        : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-800'
+                                    }`}
+                                  >
+                                    {mName}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          /* Standard Days Calendar View */
+                          <>
+                            {/* Weekday headers */}
+                            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-neutral-400 mb-2">
+                              <span>M</span>
+                              <span>T</span>
+                              <span>W</span>
+                              <span>T</span>
+                              <span>F</span>
+                              <span>S</span>
+                              <span>S</span>
+                            </div>
+
+                            {/* Days Grid */}
+                            <div className="grid grid-cols-7 gap-1">
+                              {calendarDays.map((cell, idx) => {
+                                const isSelected = cell.dateStr === currentDate;
+                                const isToday = cell.dateStr === formatDateToISO(new Date());
+
+                                return (
+                                  <button
+                                    key={`cal-day-${idx}-${cell.dateStr}`}
+                                    type="button"
+                                    onClick={() => {
+                                      triggerHaptic('selection');
+                                      setIsSavedJustNow(false);
+                                      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                                      setCurrentDate(cell.dateStr);
+                                      setIsCalendarOpen(false);
+                                    }}
+                                    className={`h-8 rounded-xl text-xs font-semibold flex items-center justify-center transition-all cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-purple-600 text-white shadow-xs'
+                                        : isToday
+                                        ? isDark
+                                          ? 'border border-purple-500/50 text-purple-300 hover:bg-purple-500/10'
+                                          : 'border border-purple-400 text-purple-700 hover:bg-purple-50'
+                                        : cell.isCurrentMonth
+                                        ? isDark
+                                          ? 'hover:bg-neutral-800 text-neutral-200'
+                                          : 'hover:bg-neutral-100 text-neutral-800'
+                                        : isDark
+                                        ? 'text-neutral-600 hover:bg-neutral-800/40'
+                                        : 'text-neutral-400 hover:bg-neutral-100/50'
+                                    }`}
+                                  >
+                                    {cell.dayNum}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
+                        )}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -1361,25 +1510,8 @@ export function DiaryDrawer({
                 </div>
               </div>
 
-              {/* Right: Prompts Inspiration + More menu (...) + Dedicated Save button */}
+              {/* Right: More menu (...) + Dedicated Save button */}
               <div className="flex items-center gap-2 shrink-0 relative">
-                {/* Journaling Prompts Inspiration Button */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('light');
-                    setIsPromptsOpen(true);
-                  }}
-                  className={`h-8 sm:h-9 px-3 rounded-full flex items-center gap-1.5 text-xs font-medium transition-all active:scale-95 cursor-pointer ${
-                    isDark
-                      ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20'
-                      : 'bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/80'
-                  }`}
-                  title="Writing prompts & inspiration"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline font-medium">Prompts</span>
-                </button>
                 {/* More Menu (...) containing Header Extras */}
                 <div ref={moreMenuRef}>
                   <button

@@ -21,7 +21,12 @@ export function formatDiaryHeaderDate(dateInput?: string | Date): string {
   }
 
   if (isNaN(d.getTime())) {
-    return '7 Sept 2026';
+    d = new Date();
+  }
+
+  // Prevent JavaScript missing-year bug where dates like "Sep 4" default to 2001
+  if (d.getFullYear() === 2001) {
+    d.setFullYear(new Date().getFullYear());
   }
 
   const day = d.getDate();
@@ -34,7 +39,38 @@ export function formatDiaryHeaderDate(dateInput?: string | Date): string {
   return `${day} ${month} ${year}`;
 }
 
+export function formatDateToISO(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function parseNoteDateToISO(dateInput?: string): string {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  if (!dateInput || !dateInput.trim()) {
+    return formatDateToISO(now);
+  }
+  let dateStr = dateInput.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    if (dateStr.startsWith('2001-')) {
+      return `${currentYear}${dateStr.slice(4)}`;
+    }
+    return dateStr;
+  }
+  const parsed = new Date(dateStr);
+  if (isNaN(parsed.getTime())) {
+    return formatDateToISO(now);
+  }
+  if (parsed.getFullYear() === 2001) {
+    parsed.setFullYear(currentYear);
+  }
+  return formatDateToISO(parsed);
+}
+
 export function stripHtml(html?: string): string {
   if (!html) return '';
   return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
 }
+

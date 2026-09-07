@@ -33,6 +33,7 @@ import {
   triggerHaptic,
 } from './lib/capacitor';
 import { detectTodoIcon } from './lib/todoIcons';
+import { formatDateToISO } from './lib/formatters';
 
 
 export default function App() {
@@ -346,10 +347,7 @@ export default function App() {
       id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       title,
       content,
-      date: new Date().toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
+      date: formatDateToISO(new Date()),
       isFavorite: activeTab === 'favorites',
       isTodo,
       isVault: isSafe,
