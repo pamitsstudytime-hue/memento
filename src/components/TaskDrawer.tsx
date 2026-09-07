@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { TodoSubItem, NoteItem } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
+import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 
 interface TaskDrawerProps {
   isOpen: boolean;
@@ -69,10 +71,10 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
       setSelectedListId(item.listId);
       setIsListDropdownOpen(false);
 
-      // Auto-focus after drawer animation starts
+      // Auto-focus smoothly with preventScroll as drawer starts gliding
       const t = setTimeout(() => {
         if (textareaRef.current) {
-          textareaRef.current.focus();
+          textareaRef.current.focus({ preventScroll: true });
           textareaRef.current.setSelectionRange(
             textareaRef.current.value.length,
             textareaRef.current.value.length
@@ -80,7 +82,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
           textareaRef.current.style.height = 'auto';
           textareaRef.current.style.height = `${Math.max(40, textareaRef.current.scrollHeight)}px`;
         }
-      }, 120);
+      }, 40);
       return () => clearTimeout(t);
     }
   }, [item, isOpen]);
@@ -152,10 +154,19 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
     return `${yr}-${m}-${day}`;
   })();
 
+  const isDesktop = useIsDesktop();
+  const keyboardOffset = useKeyboardOffset();
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
+        <div
+          style={{
+            paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+            transition: 'padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
+        >
           {/* Backdrop overlay */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -171,7 +182,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
             initial={{ y: '100%', opacity: 0.8 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 30, stiffness: 340 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[85vh] overflow-hidden transition-colors ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
             }`}
@@ -280,7 +291,7 @@ export const TaskDrawer: React.FC<TaskDrawerProps> = ({
                     }
                     onClose();
                   }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                  className={`w-8 h-8 rounded-full ${!item.task.text ? 'hidden sm:flex' : 'flex'} items-center justify-center active:scale-95 transition-all ${
                     isDark
                       ? 'bg-[#1e1e1e] hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400'
                       : 'bg-neutral-100 hover:bg-rose-50 text-neutral-600 hover:text-rose-600'

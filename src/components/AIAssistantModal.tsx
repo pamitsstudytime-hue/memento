@@ -52,7 +52,7 @@ export function AIAssistantModal({
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             className={`relative w-full max-w-md mx-auto rounded-t-3xl p-5 pb-8 shadow-2xl flex flex-col ${
               isDark ? 'bg-[#121212] text-white' : 'bg-white text-neutral-900'
             }`}
@@ -81,7 +81,7 @@ export function AIAssistantModal({
               <button
                 type="button"
                 onClick={onClose}
-                className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center ${
                   isDark
                     ? 'bg-[#1e1e1e] text-neutral-400 hover:text-white'
                     : 'bg-[#f0f1f4] text-neutral-600 hover:text-neutral-900'

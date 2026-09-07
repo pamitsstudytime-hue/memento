@@ -140,16 +140,26 @@ export const TaskListSelectModal: React.FC<TaskListSelectModalProps> = ({
             isDark ? 'bg-[#121212] text-white' : 'bg-white text-neutral-900'
           }`}
         >
+          {/* Mobile drag handle */}
+          <div className="sm:hidden flex justify-center pb-1">
+            <div
+              className={`w-9 h-1 rounded-full ${
+                isDark ? 'bg-neutral-800' : 'bg-neutral-300'
+              }`}
+            />
+          </div>
+
           {/* Minimal Header */}
-          <div className="flex items-center justify-between pb-3">
-            <h3 className="text-base sm:text-lg font-semibold tracking-tight">
+          <div className="flex items-center justify-between pb-2.5">
+            <h3 className="text-base sm:text-lg font-semibold tracking-tight hidden sm:block">
               Select list
             </h3>
+            <div className="sm:hidden" />
 
             <button
               type="button"
               onClick={onClose}
-              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 active:scale-95 transition-all ${
+              className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center shrink-0 active:scale-95 transition-all ${
                 isDark
                   ? 'bg-[#1e1e1e] text-neutral-400 hover:text-white'
                   : 'bg-[#f0f1f4] text-neutral-600 hover:text-neutral-900'
@@ -251,7 +261,7 @@ export const TaskListSelectModal: React.FC<TaskListSelectModalProps> = ({
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                      isDark ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-200/70 text-neutral-700'
+                      isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
                     }`}
                   >
                     <Folder className="w-4 h-4 stroke-[2]" />
@@ -307,8 +317,8 @@ export const TaskListSelectModal: React.FC<TaskListSelectModalProps> = ({
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <div
-                            className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                              isDark ? 'bg-neutral-800 text-neutral-200' : 'bg-neutral-200/60 text-neutral-700'
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
                             }`}
                           >
                             <IconComp className="w-4 h-4 stroke-[2]" />

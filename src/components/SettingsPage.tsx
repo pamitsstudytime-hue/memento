@@ -600,7 +600,7 @@ export function SettingsPage({
               transition={
                 isDesktop
                   ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                  : { type: 'spring', damping: 28, stiffness: 300 }
+                  : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
               }
               className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-3xl md:rounded-3xl pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl transition-colors ${
                 isDark ? 'bg-[#121212] text-white' : 'bg-white text-neutral-900'

@@ -52,7 +52,7 @@ export const ArchiveDrawer: React.FC<ArchiveDrawerProps> = ({
             transition={
               isDesktop
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                : { type: 'spring', damping: 30, stiffness: 340 }
+                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
             className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl flex flex-col max-h-[85vh] md:max-h-[80vh] overflow-hidden transition-colors ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
@@ -115,7 +115,7 @@ export const ArchiveDrawer: React.FC<ArchiveDrawerProps> = ({
                   triggerHaptic('light');
                   onClose();
                 }}
-                className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                   isDark
                     ? 'bg-[#1e1e1e] text-neutral-400 hover:text-white'
                     : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'

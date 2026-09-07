@@ -513,13 +513,15 @@ function NoteCard({
       )}
 
       <div className="flex items-start justify-between gap-2">
-        <h3
-          className={`text-sm font-semibold tracking-tight leading-snug line-clamp-2 min-w-0 flex-1 break-words ${
-            isDark ? 'text-white' : 'text-neutral-900'
-          }`}
-        >
-          {capitalizeFirstChar(note.title)}
-        </h3>
+        <div className="min-w-0 flex-1">
+          <h3
+            className={`text-sm font-semibold tracking-tight leading-snug line-clamp-2 min-w-0 break-words ${
+              isDark ? 'text-white' : 'text-neutral-900'
+            }`}
+          >
+            {capitalizeFirstChar(note.title)}
+          </h3>
+        </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
           {isDiary && (
@@ -557,31 +559,29 @@ function NoteCard({
             </span>
           )}
 
-          {isPassKey && (
-            <>
-              {safeBadge && safeBadge.name && SafeCategoryIcon && (
-                <span
-                  className={`inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 border ${
-                    isDark ? safeBadge.darkIcon : safeBadge.lightIcon
-                  }`}
-                  title={safeBadge.name}
-                >
-                  <SafeCategoryIcon className="w-2.5 h-2.5 stroke-[2]" />
-                </span>
-              )}
+          {isPassKey && safeBadge && safeBadge.name && SafeCategoryIcon && (
+            <span
+              className={`inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 border ${
+                isDark ? safeBadge.darkIcon : safeBadge.lightIcon
+              }`}
+              title={safeBadge.name}
+            >
+              <SafeCategoryIcon className="w-2.5 h-2.5 stroke-[2]" />
+            </span>
+          )}
 
-              <span
-                className={`inline-flex items-center justify-center w-5 h-5 md:w-auto md:h-auto md:px-2 md:py-0.5 md:gap-1 text-[10px] font-medium rounded-full shrink-0 ${
-                  isDark
-                    ? 'bg-amber-500/10 text-amber-200 border border-amber-500/20'
-                    : 'bg-amber-100 text-amber-800 border border-amber-200/80'
-                }`}
-                title="Safe key"
-              >
-                <KeyRound className="w-3 h-3 md:w-2.5 md:h-2.5 text-amber-500 dark:text-amber-400 shrink-0" />
-                <span className="hidden md:inline">Key</span>
-              </span>
-            </>
+          {isPassKey && (
+            <span
+              className={`inline-flex items-center justify-center w-5 h-5 md:w-auto md:h-auto md:px-2 md:py-0.5 md:gap-1 text-[10px] font-medium rounded-full shrink-0 ${
+                isDark
+                  ? 'bg-amber-500/10 text-amber-200 border border-amber-500/20'
+                  : 'bg-amber-100 text-amber-800 border border-amber-200/80'
+              }`}
+              title="Safe key"
+            >
+              <KeyRound className="w-3 h-3 md:w-2.5 md:h-2.5 text-amber-500 dark:text-amber-400 shrink-0" />
+              <span className="hidden md:inline">Key</span>
+            </span>
           )}
 
           {!isPassKey && !isDiary && !isTodo && (

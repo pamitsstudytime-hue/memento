@@ -60,7 +60,7 @@ export function DrawerMenu({
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             className={`relative w-full max-w-md mx-auto rounded-t-3xl pt-3 pb-6 px-5 shadow-2xl transition-colors duration-200 ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
             }`}

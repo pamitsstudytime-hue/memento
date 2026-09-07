@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ThemeMode, TodoSubItem, NoteItem } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { triggerHaptic } from '../lib/capacitor';
 import { getTodoIconComponent } from '../lib/todoIcons';
 import { TaskListSelectModal } from './TaskListSelectModal';
@@ -94,6 +95,7 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
 }) => {
   const isDark = theme === 'dark';
   const isDesktop = useIsDesktop();
+  const keyboardOffset = useKeyboardOffset();
   const [inputText, setInputText] = useState('');
   const [preselectedListId, setPreselectedListId] = useState<string | null>(null);
   const [preselectedListName, setPreselectedListName] = useState<string | null>(null);
@@ -109,8 +111,8 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
       setPendingTaskForModal(null);
       setIsPreselectModalOpen(false);
       const timer = setTimeout(() => {
-        inputRef.current?.focus();
-      }, 250);
+        inputRef.current?.focus({ preventScroll: true });
+      }, 40);
       return () => clearTimeout(timer);
     }
   }, [isOpen, dateStr]);
@@ -143,19 +145,19 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
       triggerHaptic('light');
       onAddTask(trimmed, dateStr);
       setInputText('');
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
     } else {
       // If user already pre-selected a specific list
       if (preselectedListId) {
         triggerHaptic('light');
         onAddTask(trimmed, dateStr, preselectedListId);
         setInputText('');
-        inputRef.current?.focus();
+        inputRef.current?.focus({ preventScroll: true });
       } else if (preselectedListName) {
         triggerHaptic('light');
         onAddTask(trimmed, dateStr, undefined, preselectedListName);
         setInputText('');
-        inputRef.current?.focus();
+        inputRef.current?.focus({ preventScroll: true });
       } else {
         // Prompt for what list to add it to!
         triggerHaptic('selection');
@@ -167,7 +169,13 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
+        <div
+          style={{
+            paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+            transition: 'padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -185,7 +193,7 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
             transition={
               isDesktop
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                : { type: 'spring', damping: 30, stiffness: 340 }
+                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
             className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[82vh] overflow-hidden transition-colors ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
@@ -253,7 +261,7 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                   isDark
                     ? 'bg-[#1e1e1e] text-neutral-300 hover:text-white'
                     : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
@@ -428,7 +436,7 @@ export const DayDetailsDrawer: React.FC<DayDetailsDrawerProps> = ({
                 onAddTask(pendingTaskForModal, dateStr, listId, newListName);
                 setPendingTaskForModal(null);
                 setInputText('');
-                inputRef.current?.focus();
+                inputRef.current?.focus({ preventScroll: true });
               }
             }}
           />

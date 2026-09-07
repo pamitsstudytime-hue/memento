@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { ThemeMode, NoteItem, TodoSubItem } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { capitalizeFirstChar } from '../lib/formatters';
 import { SubDrawerMoreMenu } from './SubDrawerMoreMenu';
 import { getTodoIconComponent } from '../lib/todoIcons';
@@ -95,6 +96,7 @@ export function TodoDrawer({
 }: TodoDrawerProps) {
   const isDark = theme === 'dark';
   const isDesktop = useIsDesktop();
+  const keyboardOffset = useKeyboardOffset();
 
   const [newTaskInput, setNewTaskInput] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -165,7 +167,13 @@ export function TodoDrawer({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
+        <div
+          style={{
+            paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+            transition: 'padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -183,7 +191,7 @@ export function TodoDrawer({
             transition={
               isDesktop
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                : { type: 'spring', damping: 30, stiffness: 340 }
+                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
             className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[82vh] overflow-hidden transition-colors ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
@@ -261,7 +269,7 @@ export function TodoDrawer({
                   id="todo-drawer-close-btn"
                   type="button"
                   onClick={onClose}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                  className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                     isDark
                       ? 'bg-[#1e1e1e] text-neutral-300 hover:text-white'
                       : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'

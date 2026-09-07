@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, ChangeEvent, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, useMemo, ChangeEvent, KeyboardEvent, MouseEvent, TouchEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Check,
@@ -45,6 +45,7 @@ import {
   PersonalInfoField,
 } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { parseTodoItemsFromNote } from './TodoDrawer';
 import { triggerHaptic } from '../lib/capacitor';
 import { ImageLightbox } from './ImageLightbox';
@@ -529,6 +530,50 @@ export function NewNoteModal({
   }, [showTodoIconPicker]);
 
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const lastTitleClickTimeRef = useRef<number>(0);
+  const lastTitleTouchTimeRef = useRef<number>(0);
+
+  // Double click / double tap on title bar toggles existing notes / lists suggestions:
+  // "once to show, twice to disappear then again one show then dis, got it"
+  const handleTitleBarClick = (e: MouseEvent) => {
+    if ((e.target as HTMLElement)?.closest('button')) return;
+    const now = Date.now();
+    const timeDiff = now - lastTitleClickTimeRef.current;
+    lastTitleClickTimeRef.current = now;
+
+    if (timeDiff > 0 && timeDiff < 380) {
+      triggerHaptic('light');
+      setShowTitleSuggestions((prev) => !prev);
+    } else {
+      if (!showTitleSuggestions) {
+        setShowTitleSuggestions(true);
+      }
+    }
+  };
+
+  const handleTitleBarDoubleClick = (e: MouseEvent) => {
+    if ((e.target as HTMLElement)?.closest('button')) return;
+    e.stopPropagation();
+    triggerHaptic('light');
+    setShowTitleSuggestions((prev) => !prev);
+  };
+
+  const handleTitleBarTouchEnd = (e: TouchEvent) => {
+    if ((e.target as HTMLElement)?.closest('button')) return;
+    const now = Date.now();
+    const timeDiff = now - lastTitleTouchTimeRef.current;
+    lastTitleTouchTimeRef.current = now;
+
+    if (timeDiff > 0 && timeDiff < 380) {
+      triggerHaptic('light');
+      setShowTitleSuggestions((prev) => !prev);
+    } else {
+      if (!showTitleSuggestions) {
+        setShowTitleSuggestions(true);
+      }
+    }
+  };
+
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const todoFloatingInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -767,13 +812,15 @@ export function NewNoteModal({
       setShowTodoIconPicker(false);
 
       if (autoOpenKeyboard) {
-        setTimeout(() => {
+        // Trigger focus promptly with preventScroll so keyboard opens smoothly together with the drawer sheet
+        const focusTimer = setTimeout(() => {
           if (initialType === 'todo' && editingNote?.title) {
-            todoFloatingInputRef.current?.focus();
+            todoFloatingInputRef.current?.focus({ preventScroll: true });
           } else {
-            titleInputRef.current?.focus();
+            titleInputRef.current?.focus({ preventScroll: true });
           }
-        }, 150);
+        }, 40);
+        return () => clearTimeout(focusTimer);
       }
     }
   }, [isOpen, editingNote, initialType, autoOpenKeyboard]);
@@ -1637,13 +1684,20 @@ export function NewNoteModal({
   };
 
   const isDesktop = useIsDesktop();
+  const keyboardOffset = useKeyboardOffset();
   const safeEntryType: EntryType = typeConfig[entryType] ? entryType : 'notes';
   const ActiveIcon = typeConfig[safeEntryType].icon;
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
+        <div
+          style={{
+            paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+            transition: 'padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
+        >
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -1661,9 +1715,9 @@ export function NewNoteModal({
             transition={
               isDesktop
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                : { type: 'spring', damping: 30, stiffness: 340 }
+                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
-            className={`relative w-full max-w-md md:max-w-xl mx-auto rounded-t-[28px] md:rounded-[28px] pt-2.5 md:pt-5 pb-5 px-5 md:px-7 shadow-2xl flex flex-col max-h-[92vh] md:max-h-[85vh] md:min-h-[460px] overflow-hidden transition-colors ${
+            className={`relative w-full max-w-md md:max-w-xl mx-auto rounded-t-[28px] md:rounded-[28px] pt-2.5 md:pt-5 pb-5 px-5 md:px-7 shadow-2xl flex flex-col min-h-[440px] md:min-h-[460px] max-h-[92vh] md:max-h-[85vh] overflow-hidden transition-colors ${
               isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
             }`}
           >
@@ -1795,14 +1849,14 @@ export function NewNoteModal({
                   <span>{editingNote ? 'Update' : 'Save'}</span>
                 </button>
 
-                {/* Close Button: Explicit X button for desktop & mobile */}
+                {/* Close Button: Explicit X button for desktop only */}
                 <button
                   id="drawer-close-btn"
                   type="button"
                   onClick={onClose}
                   aria-label="Close modal"
                   title="Close (Esc)"
-                  className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                  className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                     isDark
                       ? 'text-neutral-400 hover:text-white hover:bg-white/10'
                       : 'text-neutral-500 hover:text-neutral-900 hover:bg-black/5'
@@ -1816,7 +1870,7 @@ export function NewNoteModal({
             {/* DYNAMIC BODY: Fluid and borderless (NO split lines anywhere) */}
             <div
               className={`flex-1 ${
-                isSuggestionsActive ? 'overflow-visible relative z-30' : 'overflow-y-auto'
+                isSuggestionsActive || showTodoIconPicker ? 'overflow-visible relative z-50' : 'overflow-y-auto'
               } no-scrollbar pt-1.5 ${
                 entryType === 'todo' ? 'pb-24' : 'pb-2'
               } max-h-[55vh] md:max-h-[62vh]`}
@@ -1845,6 +1899,9 @@ export function NewNoteModal({
                       type="text"
                       value={title}
                       onChange={(e) => setTitle(e.target.value)}
+                      onClick={handleTitleBarClick}
+                      onDoubleClick={handleTitleBarDoubleClick}
+                      onTouchEnd={handleTitleBarTouchEnd}
                       placeholder="Title..."
                       className={`w-full bg-transparent text-xl font-bold tracking-tight placeholder:text-neutral-600 focus:outline-none ${
                         isDark ? 'text-white' : 'text-neutral-900'
@@ -2381,7 +2438,12 @@ export function NewNoteModal({
                     transition={{ duration: 0.15 }}
                     className="space-y-3"
                   >
-                    <div className={`relative ${isSuggestionsActive ? 'z-40' : ''}`}>
+                    <div
+                      className={`relative ${isSuggestionsActive || showTodoIconPicker ? 'z-50' : ''}`}
+                      onClick={handleTitleBarClick}
+                      onDoubleClick={handleTitleBarDoubleClick}
+                      onTouchEnd={handleTitleBarTouchEnd}
+                    >
                       <div className="flex items-center justify-between gap-2.5">
                         <input
                           ref={titleInputRef}
@@ -2403,6 +2465,9 @@ export function NewNoteModal({
                           onBlur={() => {
                             setTimeout(() => setShowTitleSuggestions(false), 220);
                           }}
+                          onClick={handleTitleBarClick}
+                          onDoubleClick={handleTitleBarDoubleClick}
+                          onTouchEnd={handleTitleBarTouchEnd}
                           placeholder="Todo List Title..."
                           className={`w-full bg-transparent text-xl font-bold tracking-tight placeholder:text-neutral-600 focus:outline-none min-w-0 flex-1 ${
                             isDark ? 'text-white' : 'text-neutral-900'
@@ -2410,7 +2475,7 @@ export function NewNoteModal({
                         />
 
                         {/* Icon option button at the right */}
-                        <div className="relative shrink-0 z-30" ref={todoIconPickerRef}>
+                        <div className={`relative shrink-0 ${showTodoIconPicker ? 'z-50' : 'z-30'}`} ref={todoIconPickerRef}>
                           <button
                             id="todo-icon-option-btn"
                             type="button"
@@ -2441,7 +2506,7 @@ export function NewNoteModal({
                               <>
                                 {/* Invisible backdrop to close picker and prevent overlapping clicks */}
                                 <div
-                                  className="fixed inset-0 z-40"
+                                  className="fixed inset-0 z-50"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setShowTodoIconPicker(false);
@@ -2453,27 +2518,27 @@ export function NewNoteModal({
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   exit={{ opacity: 0, y: 3, scale: 0.95 }}
                                   transition={{ duration: 0.15 }}
-                                  className={`absolute right-0 top-full mt-2.5 w-72 max-w-[calc(100vw-2.5rem)] p-3 rounded-2xl border shadow-2xl z-50 ${
+                                  className={`absolute right-0 top-full mt-2 w-72 max-w-[calc(100vw-2.5rem)] p-2.5 rounded-2xl border shadow-2xl z-[60] max-h-[min(320px,calc(100vh-180px))] flex flex-col ${
                                     isDark
                                       ? 'bg-[#151518] border-neutral-800 text-white shadow-[0_20px_50px_rgba(0,0,0,0.85)]'
                                       : 'bg-white border-neutral-200 text-neutral-900 shadow-[0_20px_40px_rgba(0,0,0,0.15)]'
                                   }`}
                                 >
                                   {/* Header without split line */}
-                                  <div className="flex items-center justify-between px-1 pb-2.5">
+                                  <div className="flex items-center justify-between px-1 pb-2 shrink-0">
                                     <div className="flex items-center gap-1.5">
                                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                      <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
+                                      <span className="text-[10.5px] font-bold uppercase tracking-wider text-neutral-400">
                                         List Icon
                                       </span>
                                     </div>
-                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 dark:text-emerald-300 border border-emerald-500/30 truncate max-w-[130px]">
+                                    <span className="text-[10.5px] font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 dark:text-emerald-300 border border-emerald-500/30 truncate max-w-[130px]">
                                       {TODO_ICON_OPTIONS.find((o) => o.id === (todoIcon || detectTodoIcon(title)))?.name || 'Icon'}
                                     </span>
                                   </div>
 
                                   {/* Icons Grid */}
-                                  <div className="grid grid-cols-4 gap-1.5 max-h-60 overflow-y-auto no-scrollbar pr-0.5">
+                                  <div className="grid grid-cols-4 gap-1 max-h-48 sm:max-h-56 overflow-y-auto no-scrollbar pr-0.5">
                                     {TODO_ICON_OPTIONS.map((opt) => {
                                       const IconComp = opt.icon;
                                       const currentEffective = todoIcon || detectTodoIcon(title);
@@ -2489,19 +2554,19 @@ export function NewNoteModal({
                                             setIsCustomTodoIconSelected(true);
                                             setShowTodoIconPicker(false);
                                           }}
-                                          className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all cursor-pointer ${
+                                          className={`flex flex-col items-center justify-center py-1.5 px-1 rounded-xl transition-all cursor-pointer ${
                                             isSelected
                                               ? isDark
-                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-xs shadow-emerald-500/10 scale-[1.03]'
-                                                : 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs shadow-emerald-200 scale-[1.03]'
+                                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/60 shadow-xs shadow-emerald-500/10 scale-[1.02]'
+                                                : 'bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-xs shadow-emerald-200 scale-[1.02]'
                                               : isDark
                                               ? 'text-neutral-400 hover:text-white hover:bg-neutral-800/80 border border-neutral-800/70 bg-[#1a1a1e]/60'
                                               : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100 border border-neutral-200/70 bg-neutral-50/60'
                                           }`}
                                           title={opt.name}
                                         >
-                                          <IconComp className="w-5 h-5 stroke-[2]" />
-                                          <span className="text-[9.5px] truncate max-w-[54px] mt-1 font-medium select-none">
+                                          <IconComp className="w-4.5 h-4.5 stroke-[2]" />
+                                          <span className="text-[9px] truncate max-w-[50px] mt-0.5 font-medium select-none">
                                             {opt.shortLabel}
                                           </span>
                                         </button>
@@ -2668,7 +2733,12 @@ export function NewNoteModal({
                     transition={{ duration: 0.15 }}
                     className="space-y-3"
                   >
-                    <div className={`relative ${isSuggestionsActive ? 'z-40' : ''}`}>
+                    <div
+                      className={`relative ${isSuggestionsActive ? 'z-40' : ''}`}
+                      onClick={handleTitleBarClick}
+                      onDoubleClick={handleTitleBarDoubleClick}
+                      onTouchEnd={handleTitleBarTouchEnd}
+                    >
                       <input
                         ref={titleInputRef}
                         type="text"
@@ -2681,6 +2751,9 @@ export function NewNoteModal({
                         onBlur={() => {
                           setTimeout(() => setShowTitleSuggestions(false), 220);
                         }}
+                        onClick={handleTitleBarClick}
+                        onDoubleClick={handleTitleBarDoubleClick}
+                        onTouchEnd={handleTitleBarTouchEnd}
                         placeholder="Title..."
                         className={`w-full bg-transparent text-xl font-bold tracking-tight placeholder:text-neutral-600 focus:outline-none ${
                           isDark ? 'text-white' : 'text-neutral-900'

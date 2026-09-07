@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ThemeMode, NoteItem, PersonalInfoField, DocumentAttachment } from '../types';
 import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { capitalizeFirstChar } from '../lib/formatters';
 import { getSafeNoteBadge } from '../lib/safeBadges';
 import { SubDrawerMoreMenu } from './SubDrawerMoreMenu';
@@ -82,6 +83,7 @@ export function PassKeyDrawer({
 }: PassKeyDrawerProps) {
   const isDark = theme === 'dark';
   const isDesktop = useIsDesktop();
+  const keyboardOffset = useKeyboardOffset();
 
   const [showPassword, setShowPassword] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -593,7 +595,13 @@ export function PassKeyDrawer({
     <>
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
+          <div
+            style={{
+              paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+              transition: 'padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+            }}
+            className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
+          >
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -611,7 +619,7 @@ export function PassKeyDrawer({
               transition={
                 isDesktop
                   ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                  : { type: 'spring', damping: 30, stiffness: 340 }
+                  : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
               }
               className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-[28px] md:rounded-[28px] pt-3 md:pt-6 pb-7 px-5 md:px-7 shadow-2xl flex flex-col max-h-[90vh] md:max-h-[82vh] overflow-hidden transition-colors ${
                 isDark ? 'bg-[#121212] text-white' : 'bg-[#ffffff] text-neutral-900'
@@ -683,7 +691,7 @@ export function PassKeyDrawer({
                           setFieldDocAttachment(null);
                           setFieldImgAttachment(null);
                         }}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                        className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                           isDark
                             ? 'bg-[#1e1e1e] text-neutral-400 hover:text-white'
                             : 'bg-neutral-100 text-neutral-500 hover:text-neutral-900'
@@ -780,7 +788,7 @@ export function PassKeyDrawer({
                         id="passkey-drawer-close-btn"
                         type="button"
                         onClick={onClose}
-                        className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                        className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                           isDark
                             ? 'bg-[#1e1e1e] text-neutral-300 hover:text-white'
                             : 'bg-neutral-100 text-neutral-600 hover:text-neutral-900'
@@ -1123,6 +1131,36 @@ export function PassKeyDrawer({
                               isDark ? 'text-white' : 'text-neutral-900'
                             }`}
                           />
+
+                          {/* In-Card Add Button */}
+                          <div className="flex items-center justify-end pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (fieldLabelInput.trim() && fieldValInput.trim()) {
+                                  handleSaveField(
+                                    fieldLabelInput,
+                                    fieldValInput,
+                                    fieldIsMasked,
+                                    fieldDocAttachment,
+                                    fieldImgAttachment
+                                  );
+                                  setShowFieldPresetsPopup(false);
+                                }
+                              }}
+                              disabled={!fieldLabelInput.trim() || !fieldValInput.trim()}
+                              className={`h-7 px-3.5 rounded-full flex items-center gap-1 font-medium text-xs active:scale-95 transition-all ${
+                                !fieldLabelInput.trim() || !fieldValInput.trim()
+                                  ? 'opacity-40 cursor-not-allowed bg-neutral-800 text-neutral-500'
+                                  : isDark
+                                  ? 'bg-white text-black hover:bg-neutral-200'
+                                  : 'bg-neutral-900 text-white hover:bg-neutral-800'
+                              }`}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Add</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1157,20 +1195,18 @@ export function PassKeyDrawer({
                             return (
                               <div
                                 key={field.id}
-                                className={`p-3.5 rounded-2xl transition-all border ${
-                                  isDark
-                                    ? 'bg-[#1a1a1e] border-indigo-500/30 ring-1 ring-indigo-500/20'
-                                    : 'bg-white border-indigo-200 ring-1 ring-indigo-300 shadow-sm'
+                                className={`p-3.5 rounded-2xl transition-all ${
+                                  isDark ? 'bg-[#18181b]' : 'bg-neutral-100/80'
                                 }`}
                               >
                                 <div className="flex items-center justify-between mb-2">
-                                  <label
-                                    className={`block text-[10px] font-semibold uppercase tracking-wider ${
-                                      isDark ? 'text-indigo-400' : 'text-indigo-600'
+                                  <span
+                                    className={`text-[11px] font-semibold tracking-wider uppercase ${
+                                      isDark ? 'text-neutral-400' : 'text-neutral-500'
                                     }`}
                                   >
-                                    Edit Field
-                                  </label>
+                                    Edit
+                                  </span>
                                   <div className="flex items-center gap-1.5">
                                     {/* Option to attach Document (just as icon) */}
                                     <button
@@ -1253,8 +1289,8 @@ export function PassKeyDrawer({
                                   value={fieldLabelInput}
                                   onChange={(e) => setFieldLabelInput(e.target.value)}
                                   placeholder="Field name or choose type..."
-                                  className={`w-full bg-transparent text-sm focus:outline-none placeholder:text-neutral-500 font-medium pb-1.5 border-b mb-2.5 ${
-                                    isDark ? 'text-white border-neutral-800' : 'text-neutral-900 border-neutral-200'
+                                  className={`w-full bg-transparent text-sm focus:outline-none placeholder:text-neutral-500 font-medium pb-1.5 mb-2 ${
+                                    isDark ? 'text-white' : 'text-neutral-900'
                                   }`}
                                 />
 
@@ -1368,7 +1404,7 @@ export function PassKeyDrawer({
 
                                 {/* Attached document or image badge preview */}
                                 {(fieldDocAttachment || fieldImgAttachment) && (
-                                  <div className="flex flex-wrap items-center gap-2 mb-3 pt-2 border-t border-dashed border-neutral-700/30">
+                                  <div className="flex flex-wrap items-center gap-2 mb-3 pt-1">
                                     {fieldDocAttachment && (
                                       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-500/15 text-indigo-300 text-[11px] font-medium max-w-[200px]">
                                         <FileText className="w-3 h-3 shrink-0 text-indigo-400" />
@@ -1422,18 +1458,20 @@ export function PassKeyDrawer({
                                   </div>
                                 )}
 
-                                {/* Bottom action buttons: Cancel and Update */}
-                                <div className="flex items-center justify-end gap-2 pt-1 border-t border-neutral-800/40">
+                                {/* Bottom action buttons: Save/Update with app default theme, no split line */}
+                                <div className="flex items-center justify-end gap-2 pt-2">
                                   <button
                                     type="button"
                                     onClick={handleCancelEdit}
-                                    className={`h-7 px-3 rounded-full text-xs font-medium transition-all ${
+                                    className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                                       isDark
                                         ? 'text-neutral-400 hover:text-white hover:bg-white/5'
-                                        : 'text-neutral-600 hover:text-neutral-900 hover:bg-black/5'
+                                        : 'text-neutral-500 hover:text-neutral-900 hover:bg-black/5'
                                     }`}
+                                    title="Cancel"
+                                    aria-label="Cancel editing"
                                   >
-                                    Cancel
+                                    <X className="w-3.5 h-3.5" />
                                   </button>
                                   <button
                                     type="button"

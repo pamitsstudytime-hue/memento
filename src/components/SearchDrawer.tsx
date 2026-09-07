@@ -22,6 +22,7 @@ import {
 import { ThemeMode, CategoryFilter, getNoteCategory } from '../types';
 import { NoteItem } from './EmptyBody';
 import { useIsDesktop } from '../hooks/useIsDesktop';
+import { useKeyboardOffset } from '../hooks/useKeyboardOffset';
 import { triggerHaptic } from '../lib/capacitor';
 
 interface SearchDrawerProps {
@@ -84,9 +85,10 @@ export function SearchDrawer({
       setQuery('');
       setActiveCategory(defaultCategory || 'all');
       if (autoOpenKeyboard) {
-        setTimeout(() => {
-          inputRef.current?.focus();
-        }, 150);
+        const timer = setTimeout(() => {
+          inputRef.current?.focus({ preventScroll: true });
+        }, 40);
+        return () => clearTimeout(timer);
       }
     }
   }, [isOpen, defaultCategory, autoOpenKeyboard]);
@@ -262,11 +264,18 @@ export function SearchDrawer({
   };
 
   const isDesktop = useIsDesktop();
+  const keyboardOffset = useKeyboardOffset();
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto">
+        <div
+          style={{
+            paddingBottom: !isDesktop && keyboardOffset > 0 ? `${keyboardOffset}px` : undefined,
+            transition: 'padding-bottom 0.28s cubic-bezier(0.22, 1, 0.36, 1)',
+          }}
+          className="fixed inset-0 z-50 flex flex-col justify-end md:justify-center md:items-center p-0 md:p-6 pointer-events-auto"
+        >
           {/* Backdrop overlay */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -285,7 +294,7 @@ export function SearchDrawer({
             transition={
               isDesktop
                 ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                : { type: 'spring', damping: 28, stiffness: 300 }
+                : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
             }
             className={`relative w-full max-w-md md:max-w-xl mx-auto rounded-t-3xl md:rounded-3xl pt-3 md:pt-6 pb-8 px-5 md:px-7 shadow-2xl flex flex-col max-h-[85vh] md:max-h-[80vh] transition-colors duration-200 ${
               isDark ? 'bg-[#121212] text-white' : 'bg-white text-neutral-900'
@@ -310,7 +319,7 @@ export function SearchDrawer({
                 type="button"
                 onClick={onClose}
                 aria-label="Close search"
-                className={`w-8 h-8 rounded-full flex items-center justify-center active:scale-95 transition-all ${
+                className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                   isDark
                     ? 'bg-[#1e1e1e] text-neutral-400 hover:text-white'
                     : 'bg-[#f0f1f4] text-neutral-600 hover:text-neutral-900'

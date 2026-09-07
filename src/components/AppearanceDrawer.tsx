@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { Palette, Moon, Sun, Layout, Check, Keyboard } from 'lucide-react';
+import { Palette, Moon, Sun, Layout, Check, Keyboard, X } from 'lucide-react';
 import { ThemeMode } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
 
@@ -45,7 +45,7 @@ export function AppearanceDrawer({
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             className={`relative w-full max-w-lg mx-auto rounded-t-3xl pt-3 pb-8 px-6 shadow-2xl transition-colors duration-200 ${
               isDark ? 'bg-[#121214] text-white' : 'bg-white text-neutral-900'
             }`}
@@ -76,6 +76,19 @@ export function AppearanceDrawer({
                   </p>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close appearance drawer"
+                className={`w-8 h-8 rounded-full hidden sm:flex items-center justify-center active:scale-95 transition-all ${
+                  isDark
+                    ? 'bg-[#202022] text-neutral-400 hover:text-white'
+                    : 'bg-[#f0f1f4] text-neutral-600 hover:text-neutral-900'
+                }`}
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="space-y-4">

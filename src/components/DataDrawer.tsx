@@ -186,7 +186,7 @@ export function DataDrawer({
               transition={
                 isDesktop
                   ? { duration: 0.18, ease: [0.16, 1, 0.3, 1] }
-                  : { type: 'spring', damping: 28, stiffness: 300 }
+                  : { duration: 0.32, ease: [0.22, 1, 0.36, 1] }
               }
               className={`relative w-full max-w-md md:max-w-lg mx-auto rounded-t-3xl md:rounded-3xl pt-3 md:pt-6 pb-6 px-5 md:px-7 shadow-2xl transition-colors duration-200 ${
                 isDark ? 'bg-[#121212] text-white' : 'bg-white text-neutral-900'
@@ -237,7 +237,7 @@ export function DataDrawer({
                       type="button"
                       onClick={handleClose}
                       aria-label="Close data menu"
-                      className={`w-9 h-9 rounded-xl border flex items-center justify-center active:scale-95 transition-all ${
+                      className={`w-9 h-9 rounded-xl border hidden sm:flex items-center justify-center active:scale-95 transition-all ${
                         isDark
                           ? 'border-neutral-800 bg-[#1a1a1a] text-neutral-400 hover:text-white'
                           : 'border-neutral-200 bg-white text-neutral-500 hover:text-neutral-900 hover:bg-neutral-50'
