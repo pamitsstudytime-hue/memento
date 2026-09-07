@@ -25,10 +25,13 @@ import {
   Maximize2,
   CalendarDays,
   Flame,
+  MoreHorizontal,
+  Copy,
 } from 'lucide-react';
 import { ThemeMode, NoteItem, EntryType, VoiceNoteAttachment } from '../types';
 import { triggerHaptic } from '../lib/capacitor';
 import { DiaryDrawer } from './DiaryDrawer';
+import { DiaryDayDrawer } from './DiaryDayDrawer';
 import { ImageLightbox } from './ImageLightbox';
 
 export type DiaryTab = 'inbox' | 'calendar' | 'moments';
@@ -188,6 +191,12 @@ export function DiaryPage({
   // Lightbox state for previewing pictures
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
+  // Card dropdown menu state for inbox cards
+  const [openCardMenuId, setOpenCardMenuId] = useState<string | null>(null);
+
+  // Day drawer state for clicking a day in the calendar
+  const [selectedDayDrawerDate, setSelectedDayDrawerDate] = useState<string | null>(null);
+
   // Audio player state
   const [activePlayingId, setActivePlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -229,15 +238,23 @@ export function DiaryPage({
 
   // Filter all diary notes
   const diaryNotes = useMemo(() => {
+    const seen = new Set<string>();
     return notes
-      .filter((n) => (n.entryType === 'diary' || n.isDiary) && !n.isArchived)
+      .filter((n) => {
+        if ((n.entryType === 'diary' || n.isDiary) && !n.isArchived) {
+          if (n.id && seen.has(n.id)) return false;
+          if (n.id) seen.add(n.id);
+          return true;
+        }
+        return false;
+      })
       .sort((a, b) => {
         const dateA = getNoteDateISO(a);
         const dateB = getNoteDateISO(b);
         if (dateB !== dateA) {
           return dateB.localeCompare(dateA);
         }
-        return b.id.localeCompare(a.id);
+        return (b.id || '').localeCompare(a.id || '');
       });
   }, [notes]);
 
@@ -502,9 +519,16 @@ export function DiaryPage({
       subtitle: string;
     }> = [];
 
+    const seenDates = new Set<string>();
     const curr = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
     while (curr <= maxDate) {
       const dateStr = formatDateToISO(curr);
+      if (seenDates.has(dateStr)) {
+        curr.setDate(curr.getDate() + 1);
+        continue;
+      }
+      seenDates.add(dateStr);
+
       const dayNum = curr.getDate();
       const dayOfWeek = curr.toLocaleDateString('en-US', { weekday: 'long' });
       const dayNameShort = curr.toLocaleDateString('en-US', { weekday: 'short' });
@@ -760,15 +784,8 @@ export function DiaryPage({
           </button>
 
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight flex items-center gap-2">
-              <span>Diary</span>
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  isDark ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-200/80 text-neutral-700'
-                }`}
-              >
-                {diaryNotes.length}
-              </span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">
+              Diary
             </h1>
           </div>
         </div>
@@ -793,7 +810,7 @@ export function DiaryPage({
               >
                 <Filter className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2]" />
                 {filterType !== 'all' && (
-                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-500" />
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-purple-500" />
                 )}
               </button>
 
@@ -840,7 +857,7 @@ export function DiaryPage({
                       >
                         <span>{opt.label}</span>
                         {filterType === opt.id && (
-                          <Check className="w-3.5 h-3.5 text-amber-500 stroke-[2.5]" />
+                          <Check className="w-3.5 h-3.5 text-purple-500 stroke-[2.5]" />
                         )}
                       </button>
                     ))}
@@ -866,22 +883,6 @@ export function DiaryPage({
               }`}
             >
               <Search className="w-4 h-4 sm:w-4.5 sm:h-4.5 stroke-[2]" />
-            </button>
-          )}
-
-          {/* Compose / Add Write-up Button */}
-          {onOpenNewNote && (
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('medium');
-                onOpenNewNote('diary', activeTab === 'calendar' ? selectedCalendarDate : undefined);
-              }}
-              aria-label="Write new diary entry"
-              className="h-9 px-3 sm:px-4 rounded-full flex items-center gap-1.5 text-xs font-semibold bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 hover:opacity-90 active:scale-95 transition-all shadow-xs"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden sm:inline">Write</span>
             </button>
           )}
         </div>
@@ -924,21 +925,6 @@ export function DiaryPage({
             )}
             <BookOpen className="w-4 h-4 shrink-0 relative z-10 stroke-[2.2]" />
             <span className="relative z-10">Inbox</span>
-            {diaryNotes.length > 0 && (
-              <span
-                className={`relative z-10 text-[10.5px] font-medium px-1.5 py-0.5 min-w-[18px] text-center leading-none rounded-full ${
-                  activeTab === 'inbox'
-                    ? isDark
-                      ? 'bg-neutral-800 text-neutral-300'
-                      : 'bg-neutral-100 text-neutral-700'
-                    : isDark
-                    ? 'bg-neutral-800/60 text-neutral-400'
-                    : 'bg-neutral-200/80 text-neutral-600'
-                }`}
-              >
-                {diaryNotes.length}
-              </span>
-            )}
           </button>
 
           {/* 2. Calendar Tab (Calendar kinda page like todo upcoming) */}
@@ -969,21 +955,6 @@ export function DiaryPage({
             )}
             <CalendarIcon className="w-4 h-4 shrink-0 relative z-10 stroke-[2.2]" />
             <span className="relative z-10">Calendar</span>
-            {dateEntriesMap.size > 0 && (
-              <span
-                className={`relative z-10 text-[10.5px] font-medium px-1.5 py-0.5 min-w-[18px] text-center leading-none rounded-full ${
-                  activeTab === 'calendar'
-                    ? isDark
-                      ? 'bg-neutral-800 text-neutral-300'
-                      : 'bg-neutral-100 text-neutral-700'
-                    : isDark
-                    ? 'bg-neutral-800/60 text-neutral-400'
-                    : 'bg-neutral-200/80 text-neutral-600'
-                }`}
-              >
-                {dateEntriesMap.size}d
-              </span>
-            )}
           </button>
 
           {/* 3. Moments Tab */}
@@ -1014,21 +985,6 @@ export function DiaryPage({
             )}
             <Sparkles className="w-4 h-4 shrink-0 relative z-10 stroke-[2.2]" />
             <span className="relative z-10">Moments</span>
-            {momentsData.photos.length + momentsData.voiceMemos.length > 0 && (
-              <span
-                className={`relative z-10 text-[10.5px] font-medium px-1.5 py-0.5 min-w-[18px] text-center leading-none rounded-full ${
-                  activeTab === 'moments'
-                    ? isDark
-                      ? 'bg-neutral-800 text-neutral-300'
-                      : 'bg-neutral-100 text-neutral-700'
-                    : isDark
-                    ? 'bg-neutral-800/60 text-neutral-400'
-                    : 'bg-neutral-200/80 text-neutral-600'
-                }`}
-              >
-                {momentsData.photos.length + momentsData.voiceMemos.length}
-              </span>
-            )}
           </button>
         </div>
       </div>
@@ -1049,10 +1005,10 @@ export function DiaryPage({
                 <div className="flex flex-col items-center justify-center py-20 text-center px-4">
                   <div
                     className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-4 transition-colors ${
-                      isDark ? 'bg-neutral-800/50 text-neutral-400' : 'bg-neutral-100 text-neutral-500'
+                      isDark ? 'bg-purple-500/15 text-purple-400' : 'bg-purple-50 text-purple-600'
                     }`}
                   >
-                    <Feather className="w-8 h-8 stroke-[1.8]" />
+                    <BookOpen className="w-8 h-8 stroke-[1.8]" />
                   </div>
                   <h2 className="text-lg font-semibold tracking-tight mb-1">
                     {filterType === 'all' ? 'Your Personal Sanctuary' : 'No Matching Write-ups'}
@@ -1103,28 +1059,23 @@ export function DiaryPage({
                           setReadingNote(item);
                         }}
                       >
-                        {/* Entry Header: Date & Bookmark */}
+                        {/* Entry Header: Date & Bookmark & More Menu */}
                         <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-[11px] font-semibold tracking-wide uppercase px-2.5 py-0.5 rounded-full ${
-                                friendlyDate === 'Today'
-                                  ? isDark
-                                    ? 'bg-amber-500/20 text-amber-300'
-                                    : 'bg-amber-100 text-amber-800'
-                                  : isDark
-                                  ? 'bg-neutral-800 text-neutral-300'
-                                  : 'bg-neutral-100 text-neutral-700'
-                              }`}
-                            >
-                              {friendlyDate}
-                            </span>
-                            <span className="text-[11px] text-neutral-400">
-                              {item.date || noteISO}
-                            </span>
-                          </div>
+                          <span
+                            className={`text-[11px] font-semibold tracking-wide px-2.5 py-0.5 rounded-full ${
+                              friendlyDate === 'Today'
+                                ? isDark
+                                  ? 'bg-purple-500/20 text-purple-300'
+                                  : 'bg-purple-100 text-purple-800'
+                                : isDark
+                                ? 'bg-neutral-800 text-neutral-300'
+                                : 'bg-neutral-100 text-neutral-700'
+                            }`}
+                          >
+                            {friendlyDate}
+                          </span>
 
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1 relative" onClick={(e) => e.stopPropagation()}>
                             {/* Favorite bookmark */}
                             {onToggleFavorite && (
                               <button
@@ -1136,7 +1087,9 @@ export function DiaryPage({
                                 aria-label={item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                                 className={`p-1.5 rounded-full transition-colors ${
                                   item.isFavorite
-                                    ? 'text-amber-500'
+                                    ? isDark
+                                      ? 'text-purple-400'
+                                      : 'text-purple-600'
                                     : isDark
                                     ? 'text-neutral-500 hover:text-neutral-300'
                                     : 'text-neutral-400 hover:text-neutral-700'
@@ -1149,37 +1102,94 @@ export function DiaryPage({
                               </button>
                             )}
 
-                            {/* Edit Action */}
-                            {onSelectNote && (
+                            {/* More button */}
+                            <div className="relative">
                               <button
                                 type="button"
                                 onClick={() => {
                                   triggerHaptic('light');
-                                  onSelectNote(item);
+                                  setOpenCardMenuId((prev) => (prev === item.id ? null : item.id));
                                 }}
-                                aria-label="Edit diary entry"
-                                className={`p-1.5 rounded-full opacity-60 hover:opacity-100 transition-opacity ${
-                                  isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-600 hover:text-black'
+                                aria-label="More actions"
+                                className={`p-1.5 rounded-full transition-colors ${
+                                  openCardMenuId === item.id
+                                    ? isDark
+                                      ? 'bg-neutral-800 text-white'
+                                      : 'bg-neutral-200 text-neutral-900'
+                                    : isDark
+                                    ? 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'
+                                    : 'text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100'
                                 }`}
                               >
-                                <Pencil className="w-3.5 h-3.5" />
+                                <MoreHorizontal className="w-4 h-4" />
                               </button>
-                            )}
 
-                            {/* Delete Action */}
-                            {onDeleteNote && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  triggerHaptic('medium');
-                                  onDeleteNote(item.id);
-                                }}
-                                aria-label="Delete diary entry"
-                                className="p-1.5 rounded-full opacity-40 hover:opacity-100 hover:text-red-500 transition-all text-neutral-400"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                              {/* Dropdown Menu */}
+                              <AnimatePresence>
+                                {openCardMenuId === item.id && (
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: -2 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: -2 }}
+                                    transition={{ duration: 0.12 }}
+                                    className={`absolute right-0 top-full mt-1 w-36 rounded-xl border shadow-xl p-1 z-30 ${
+                                      isDark
+                                        ? 'bg-[#18181b] border-neutral-700 text-white shadow-black/60'
+                                        : 'bg-white border-neutral-200 text-neutral-900 shadow-neutral-300/40'
+                                    }`}
+                                  >
+                                    {onSelectNote && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenCardMenuId(null);
+                                          triggerHaptic('light');
+                                          onSelectNote(item);
+                                        }}
+                                        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                          isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                                        }`}
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                        <span>Edit</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenCardMenuId(null);
+                                        triggerHaptic('light');
+                                        if (item.content) {
+                                          navigator.clipboard?.writeText(item.content);
+                                        }
+                                      }}
+                                      className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                                        isDark ? 'hover:bg-neutral-800 text-neutral-200' : 'hover:bg-neutral-100 text-neutral-800'
+                                      }`}
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                      <span>Copy Text</span>
+                                    </button>
+
+                                    {onDeleteNote && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenCardMenuId(null);
+                                          triggerHaptic('medium');
+                                          onDeleteNote(item.id);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-red-500 hover:bg-red-500/10"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <span>Delete</span>
+                                      </button>
+                                    )}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
                           </div>
                         </div>
 
@@ -1253,7 +1263,7 @@ export function DiaryPage({
                               }}
                               className={`h-7 px-2.5 rounded-full flex items-center gap-1.5 text-[11px] font-medium transition-all ${
                                 activePlayingId === `inbox-${item.id}`
-                                  ? 'bg-amber-500 text-white'
+                                  ? 'bg-purple-500 text-white'
                                   : isDark
                                   ? 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
                                   : 'bg-neutral-200/90 text-neutral-800 hover:bg-neutral-300'
@@ -1272,7 +1282,7 @@ export function DiaryPage({
                         )}
 
                         {/* Footer Meta: reading time & tags */}
-                        <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-1 border-t border-neutral-200/40 dark:border-neutral-800/60">
+                        <div className="flex items-center justify-between text-[11px] text-neutral-400 mt-1">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3 stroke-[2]" />
                             <span>{readingTime} min read</span>
@@ -1383,8 +1393,8 @@ export function DiaryPage({
                             : 'bg-neutral-900 text-white font-bold shadow-sm'
                           : cell.isToday
                           ? isDark
-                            ? 'text-amber-400 font-bold bg-amber-500/15 ring-1 ring-amber-500/40'
-                            : 'text-amber-600 font-bold bg-amber-50 ring-1 ring-amber-500/40'
+                            ? 'text-purple-400 font-bold bg-purple-500/15 ring-1 ring-purple-500/40'
+                            : 'text-purple-600 font-bold bg-purple-50 ring-1 ring-purple-500/40'
                           : cell.isCurrentMonth
                           ? isDark
                             ? 'text-neutral-200 hover:bg-[#1c1c1f]'
@@ -1400,9 +1410,9 @@ export function DiaryPage({
                           className={`w-1.5 h-1.5 rounded-full mt-0.5 ${
                             isSelected
                               ? isDark
-                                ? 'bg-amber-600'
-                                : 'bg-amber-400'
-                              : 'bg-amber-500'
+                                ? 'bg-purple-600'
+                                : 'bg-purple-400'
+                              : 'bg-purple-500'
                           }`}
                         />
                       )}
@@ -1452,7 +1462,7 @@ export function DiaryPage({
           {/* SCROLLING DAYS LIST - STRICTLY POSITIONED BELOW THE STATIC CALENDAR */}
           <div
             ref={contentScrollRef}
-            className="flex-1 overflow-y-auto min-h-0 space-y-3 pb-24 md:pb-8 pr-0.5"
+            className="flex-1 overflow-y-auto min-h-0 space-y-2.5 pb-24 md:pb-8 pr-0.5"
           >
             {diaryDaysList.map((day) => {
               const dayEntries = dateEntriesMap.get(day.dateStr) || [];
@@ -1463,233 +1473,127 @@ export function DiaryPage({
                   key={`diary-day-${day.dateStr}`}
                   id={`diary-day-section-${day.dateStr}`}
                   data-date={day.dateStr}
-                  className={`diary-day-scroll-section rounded-2xl p-4 sm:p-5 border transition-all duration-200 ${
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    setSelectedCalendarDate(day.dateStr);
+                    setSelectedDayDrawerDate(day.dateStr);
+                  }}
+                  className={`diary-day-scroll-section group cursor-pointer scroll-mt-2 rounded-2xl p-3 sm:p-3.5 border transition-all duration-200 active:scale-[0.99] flex items-center justify-between gap-3 ${
                     isSelected
                       ? isDark
-                        ? 'bg-[#151518] border-neutral-700 shadow-md ring-1 ring-neutral-700/50'
+                        ? 'bg-[#18181b] border-neutral-700 shadow-md ring-1 ring-neutral-700/60'
                         : 'bg-white border-neutral-300 shadow-md ring-1 ring-neutral-200'
                       : isDark
-                      ? 'bg-[#121214]/80 hover:bg-[#151518] border-neutral-800/80'
-                      : 'bg-white/80 hover:bg-white border-neutral-200/90 shadow-2xs'
+                      ? 'bg-[#141416] hover:bg-[#19191d] border-neutral-800/80 hover:border-neutral-700/80 shadow-2xs'
+                      : 'bg-white hover:bg-neutral-50/80 border-neutral-200/80 hover:border-neutral-300 shadow-2xs'
                   }`}
-                  onClick={() => {
-                    if (selectedCalendarDate !== day.dateStr) {
-                      triggerHaptic('light');
-                      setSelectedCalendarDate(day.dateStr);
-                    }
-                  }}
                 >
-                  {/* Day Header */}
-                  <div className="flex items-center justify-between gap-2 mb-3">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                  {/* Left: Minimal Date Badge & Day Title */}
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Compact calendar badge */}
+                    <div
+                      className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center shrink-0 border transition-colors ${
+                        day.isToday
+                          ? isDark
+                            ? 'bg-purple-500/15 border-purple-500/30 text-purple-400 font-bold'
+                            : 'bg-purple-50 border-purple-500/30 text-purple-600 font-bold'
+                          : isDark
+                          ? 'bg-[#1a1a1e] border-neutral-800/80 text-neutral-300 group-hover:border-neutral-700'
+                          : 'bg-neutral-100 border-neutral-200/80 text-neutral-700 group-hover:border-neutral-300'
+                      }`}
+                    >
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider leading-none ${
                           day.isToday
-                            ? 'bg-amber-500 text-black'
-                            : isDark
-                            ? 'bg-neutral-800 text-neutral-200'
-                            : 'bg-neutral-100 text-neutral-800'
+                            ? isDark
+                              ? 'text-purple-400'
+                              : 'text-purple-600'
+                            : 'text-neutral-400'
                         }`}
                       >
+                        {day.dayNameShort}
+                      </span>
+                      <span className="text-sm font-semibold leading-tight mt-0.5">
                         {day.dayNum}
-                      </div>
-
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`text-xs sm:text-sm font-semibold tracking-tight ${
-                              day.isToday
-                                ? isDark
-                                  ? 'text-amber-400'
-                                  : 'text-amber-700'
-                                : isDark
-                                ? 'text-neutral-100'
-                                : 'text-neutral-900'
-                            }`}
-                          >
-                            {day.title}
-                          </span>
-                          {day.isToday && (
-                            <span
-                              className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider ${
-                                isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              Today
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-neutral-400">
-                          {day.subtitle}
-                        </p>
-                      </div>
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
-                      {/* Write new entry for this day button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          triggerHaptic('light');
-                          onOpenNewNote?.('diary', day.dateStr);
-                        }}
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
-                          isDark
-                            ? 'bg-neutral-800/80 hover:bg-neutral-700 text-neutral-200'
-                            : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700'
+                    {/* Day text & subtitle */}
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {day.isToday && (
+                          <span className="w-2 h-2 rounded-full bg-purple-500 shrink-0" />
+                        )}
+                        <h3
+                          className={`text-sm font-semibold truncate ${
+                            day.isToday
+                              ? isDark
+                                ? 'text-purple-400'
+                                : 'text-purple-600'
+                              : isDark
+                              ? 'text-white'
+                              : 'text-neutral-900'
+                          }`}
+                        >
+                          {day.title}
+                        </h3>
+                      </div>
+                      <p
+                        className={`text-[11px] truncate mt-0.5 ${
+                          isDark ? 'text-neutral-400' : 'text-neutral-500'
                         }`}
                       >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Write</span>
-                      </button>
+                        {day.subtitle}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Day's Entries List */}
-                  {dayEntries.length > 0 ? (
-                    <div className="space-y-2.5">
-                      {dayEntries.map((item) => (
-                        <div
-                          key={`day-entry-${item.id}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            triggerHaptic('light');
-                            setReadingNote(item);
-                          }}
-                          className={`group rounded-xl p-3 sm:p-3.5 border transition-all duration-200 cursor-pointer ${
-                            isDark
-                              ? 'bg-[#18181c] hover:bg-[#202024] border-neutral-800/80 hover:border-neutral-700'
-                              : 'bg-neutral-50 hover:bg-neutral-100/80 border-neutral-200/80 hover:border-neutral-300'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm shrink-0">
-                                {getMoodEmoji(item.mood)}
-                              </span>
-                              <h3
-                                className={`text-xs sm:text-sm font-semibold truncate ${
-                                  isDark ? 'text-neutral-100' : 'text-neutral-900'
-                                }`}
-                              >
-                                {item.title || 'Untitled Write-up'}
-                              </h3>
-                            </div>
+                  {/* Middle / Right: Meaningful status pills & Action */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {dayEntries.length > 0 && (
+                      <span
+                        className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border transition-colors ${
+                          day.isToday
+                            ? isDark
+                              ? 'bg-purple-500/10 border-purple-500/20 text-purple-300'
+                              : 'bg-purple-50 border-purple-200 text-purple-700'
+                            : isDark
+                            ? 'bg-[#1a1a1e] border-neutral-800/80 text-neutral-300'
+                            : 'bg-neutral-100 border-neutral-200/80 text-neutral-700'
+                        }`}
+                      >
+                        {dayEntries.length} {dayEntries.length === 1 ? 'entry' : 'entries'}
+                      </span>
+                    )}
 
-                            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                              {onToggleFavorite && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    triggerHaptic('light');
-                                    onToggleFavorite(item.id);
-                                  }}
-                                  className={`p-1 rounded-full transition-colors cursor-pointer ${
-                                    item.isFavorite
-                                      ? 'text-amber-500'
-                                      : isDark
-                                      ? 'text-neutral-500 hover:text-neutral-300'
-                                      : 'text-neutral-400 hover:text-neutral-700'
-                                  }`}
-                                >
-                                  <Bookmark
-                                    className="w-3.5 h-3.5"
-                                    fill={item.isFavorite ? 'currentColor' : 'none'}
-                                  />
-                                </button>
-                              )}
-
-                              {onSelectNote && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    triggerHaptic('light');
-                                    onSelectNote(item);
-                                  }}
-                                  className={`p-1 rounded-full opacity-60 hover:opacity-100 transition-opacity cursor-pointer ${
-                                    isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-600 hover:text-black'
-                                  }`}
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Content Snippet */}
-                          {item.content && (
-                            <p className="text-xs text-neutral-400 line-clamp-2 leading-relaxed mb-2">
-                              {item.content}
-                            </p>
-                          )}
-
-                          {/* Media preview chips */}
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {item.photos && item.photos.length > 0 && (
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  triggerHaptic('light');
-                                  setLightboxSrc(item.photos![0]);
-                                }}
-                                className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md font-medium cursor-pointer ${
-                                  isDark ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-200/70 text-neutral-700'
-                                }`}
-                              >
-                                <ImageIcon className="w-3 h-3" />
-                                <span>{item.photos.length} photo{item.photos.length > 1 ? 's' : ''}</span>
-                              </div>
-                            )}
-
-                            {(item.voiceNotes && item.voiceNotes.length > 0 || item.voiceAudioUrl) && (
-                              <div
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const voiceUrl = item.voiceNotes?.[0]?.audioUrl || item.voiceAudioUrl;
-                                  handlePlayVoice(`cal-day-${item.id}`, voiceUrl);
-                                }}
-                                className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md font-medium cursor-pointer ${
-                                  activePlayingId === `cal-day-${item.id}`
-                                    ? 'bg-amber-500/20 text-amber-400'
-                                    : isDark
-                                    ? 'bg-neutral-800 text-neutral-300'
-                                    : 'bg-neutral-200/70 text-neutral-700'
-                                }`}
-                              >
-                                {activePlayingId === `cal-day-${item.id}` ? (
-                                  <Pause className="w-3 h-3 animate-pulse" />
-                                ) : (
-                                  <Play className="w-3 h-3" />
-                                )}
-                                <span>{item.voiceNotes?.[0]?.duration || item.voiceDuration || 'Audio memo'}</span>
-                              </div>
-                            )}
-
-                            {item.tags && item.tags.length > 0 && item.tags.slice(0, 3).map((tag, tIdx) => (
-                              <span
-                                key={`day-tag-${item.id}-${tIdx}`}
-                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                                  isDark ? 'bg-neutral-800/80 text-neutral-400' : 'bg-neutral-200/50 text-neutral-600'
-                                }`}
-                              >
-                                #{tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    /* Day empty state */
-                    <div
-                      className={`text-center py-3.5 px-3 rounded-xl border border-dashed text-xs ${
-                        isDark ? 'border-neutral-800/80 text-neutral-500' : 'border-neutral-200 text-neutral-400'
+                    {/* Compact "+ Add" Pill button */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        triggerHaptic('light');
+                        onOpenNewNote?.('diary', day.dateStr);
+                      }}
+                      className={`h-7 px-2.5 sm:px-3 rounded-full flex items-center gap-1 text-xs font-medium transition-all active:scale-95 cursor-pointer border ${
+                        isDark
+                          ? 'bg-[#1a1a1e] hover:bg-[#222228] border-neutral-800/80 hover:border-purple-500/40 text-neutral-300 hover:text-purple-300'
+                          : 'bg-neutral-100 hover:bg-purple-50 border-neutral-200/80 hover:border-purple-200 text-neutral-700 hover:text-purple-700'
                       }`}
+                      title={`Write entry for ${day.title}`}
                     >
-                      No entries recorded for this day.
-                    </div>
-                  )}
+                      <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
+                      <span>Add</span>
+                    </button>
+
+                    {/* Chevron indicator */}
+                    <ChevronRight
+                      className={`w-4 h-4 transition-transform group-hover:translate-x-0.5 ${
+                        isDark
+                          ? 'text-neutral-500 group-hover:text-neutral-300'
+                          : 'text-neutral-400 group-hover:text-neutral-600'
+                      }`}
+                    />
+                  </div>
                 </div>
               );
             })}
@@ -1712,7 +1616,7 @@ export function DiaryPage({
                 <div className="flex flex-col items-center justify-center py-20 text-center px-4">
                   <div
                     className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-4 transition-colors ${
-                      isDark ? 'bg-neutral-800/50 text-neutral-400' : 'bg-neutral-100 text-neutral-500'
+                      isDark ? 'bg-purple-500/15 text-purple-400' : 'bg-purple-50 text-purple-600'
                     }`}
                   >
                     <Sparkles className="w-8 h-8 stroke-[1.8]" />
@@ -1743,7 +1647,7 @@ export function DiaryPage({
                   {momentsData.photos.length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
-                        <ImageIcon className="w-4 h-4 text-amber-500" />
+                        <ImageIcon className="w-4 h-4 text-purple-400" />
                         <h3 className="text-sm font-bold tracking-tight">
                           Visual Memories ({momentsData.photos.length})
                         </h3>
@@ -1788,7 +1692,7 @@ export function DiaryPage({
                   {momentsData.voiceMemos.length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
-                        <Mic className="w-4 h-4 text-amber-500" />
+                        <Mic className="w-4 h-4 text-purple-400" />
                         <h3 className="text-sm font-bold tracking-tight">
                           Voice Reflections ({momentsData.voiceMemos.length})
                         </h3>
@@ -1812,7 +1716,7 @@ export function DiaryPage({
                                   onClick={() => handlePlayVoice(vm.id, vm.voice.audioUrl)}
                                   className={`w-9 h-9 rounded-full shrink-0 flex items-center justify-center transition-all active:scale-95 ${
                                     isPlaying
-                                      ? 'bg-amber-500 text-white shadow-sm'
+                                      ? 'bg-purple-500 text-white shadow-sm'
                                       : isDark
                                       ? 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'
                                       : 'bg-neutral-100 text-neutral-800 hover:bg-neutral-200'
@@ -1861,7 +1765,7 @@ export function DiaryPage({
                   {momentsData.reflections.length > 0 && (
                     <div>
                       <div className="flex items-center gap-2 mb-3">
-                        <Quote className="w-4 h-4 text-amber-500" />
+                        <Quote className="w-4 h-4 text-purple-400" />
                         <h3 className="text-sm font-bold tracking-tight">
                           Reflections & Thoughts ({momentsData.reflections.length})
                         </h3>
@@ -1882,11 +1786,11 @@ export function DiaryPage({
                             }`}
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-[10px] uppercase font-semibold text-amber-500 tracking-wide">
+                              <span className="text-[10px] uppercase font-semibold text-purple-400 tracking-wide">
                                 {formatDisplayDate(getNoteDateISO(item), todayISO)}
                               </span>
                               {item.isFavorite && (
-                                <Bookmark className="w-3.5 h-3.5 text-amber-500 fill-current" />
+                                <Bookmark className="w-3.5 h-3.5 text-purple-400 fill-current" />
                               )}
                             </div>
                             <p
@@ -1911,6 +1815,26 @@ export function DiaryPage({
             </motion.div>
         </div>
       )}
+
+      {/* Day Details Drawer */}
+      <DiaryDayDrawer
+        isOpen={!!selectedDayDrawerDate}
+        dateStr={selectedDayDrawerDate}
+        todayStr={todayISO}
+        theme={theme}
+        entries={selectedDayDrawerDate ? (dateEntriesMap.get(selectedDayDrawerDate) || []) : []}
+        onClose={() => setSelectedDayDrawerDate(null)}
+        onSelectNote={(note) => {
+          setSelectedDayDrawerDate(null);
+          setReadingNote(note);
+        }}
+        onOpenNewNote={(date) => {
+          setSelectedDayDrawerDate(null);
+          onOpenNewNote?.('diary', date);
+        }}
+        onToggleFavorite={onToggleFavorite}
+        onDeleteNote={onDeleteNote}
+      />
 
       {/* Reader Drawer for full diary note viewing */}
       <DiaryDrawer

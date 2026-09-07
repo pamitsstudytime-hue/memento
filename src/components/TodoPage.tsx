@@ -1280,21 +1280,6 @@ export function TodoPage({
             )}
             <Inbox className="w-4 h-4 shrink-0 relative z-10 stroke-[2.2]" />
             <span className="relative z-10">Inbox</span>
-            {inboxTotalCount > 0 && (
-              <span
-                className={`relative z-10 text-[10.5px] font-medium px-1.5 py-0.5 min-w-[18px] text-center leading-none rounded-full ${
-                  activeTab === 'inbox'
-                    ? isDark
-                      ? 'bg-neutral-800 text-neutral-300'
-                      : 'bg-neutral-100 text-neutral-700'
-                    : isDark
-                    ? 'bg-neutral-800/60 text-neutral-400'
-                    : 'bg-neutral-200/80 text-neutral-600'
-                }`}
-              >
-                {inboxTotalCount}
-              </span>
-            )}
           </button>
 
           {/* 2. Today Option */}
@@ -1325,21 +1310,6 @@ export function TodoPage({
             )}
             <CalendarDays className="w-4 h-4 shrink-0 relative z-10 stroke-[2.2]" />
             <span className="relative z-10">Today</span>
-            {todayActiveCount > 0 && (
-              <span
-                className={`relative z-10 text-[10.5px] font-medium px-1.5 py-0.5 min-w-[18px] text-center leading-none rounded-full ${
-                  activeTab === 'today'
-                    ? isDark
-                      ? 'bg-neutral-800 text-neutral-300'
-                      : 'bg-neutral-100 text-neutral-700'
-                    : isDark
-                    ? 'bg-neutral-800/60 text-neutral-400'
-                    : 'bg-neutral-200/80 text-neutral-600'
-                }`}
-              >
-                {todayActiveCount}
-              </span>
-            )}
           </button>
 
           {/* 3. Upcoming Option */}
