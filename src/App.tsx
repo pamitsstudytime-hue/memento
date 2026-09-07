@@ -8,6 +8,7 @@ import { NewNoteModal } from './components/NewNoteModal';
 import { SettingsPage } from './components/SettingsPage';
 import { TodoPage } from './components/TodoPage';
 import { SafePage } from './components/SafePage';
+import { DiaryPage } from './components/DiaryPage';
 import { PassKeyDrawer } from './components/PassKeyDrawer';
 import { TodoDrawer, parseTodoItemsFromNote } from './components/TodoDrawer';
 import { DiaryDrawer } from './components/DiaryDrawer';
@@ -113,7 +114,7 @@ export default function App() {
 
   const [autoOpenKeyboard, setAutoOpenKeyboard] = useState<boolean>(() => {
     const saved = localStorage.getItem('memento_auto_open_keyboard');
-    return saved !== null ? saved === 'true' : true;
+    return saved === 'true';
   });
 
   const toggleAutoOpenKeyboard = () => {
@@ -246,7 +247,7 @@ export default function App() {
         setIsDrawerOpen(false);
         return true;
       }
-      if (currentPage === 'settings' || currentPage === 'todo' || currentPage === 'safe') {
+      if (currentPage === 'settings' || currentPage === 'todo' || currentPage === 'safe' || currentPage === 'diary') {
         setCurrentPage('main');
         setActiveTab('home');
         return true;
@@ -385,7 +386,8 @@ export default function App() {
       setCurrentPage('main');
     } else if (itemId === 'diary') {
       setActiveTab('diary');
-      setCurrentPage('main');
+      setHomeChip('diary');
+      setCurrentPage('diary');
     } else if (itemId === 'archive') {
       setActiveTab('archive');
       setCurrentPage('main');
@@ -512,6 +514,10 @@ export default function App() {
           onSelectTab={(tab) => {
             if (tab === 'todo') {
               setCurrentPage('todo');
+            } else if (tab === 'diary') {
+              setActiveTab('diary');
+              setHomeChip('diary');
+              setCurrentPage('diary');
             } else if (tab === 'vault' || tab === 'safe') {
               setHomeChip('safe');
               setActiveTab('safe');
@@ -523,6 +529,11 @@ export default function App() {
               setActiveTab(tab);
               setCurrentPage('main');
             }
+          }}
+          onOpenDiary={() => {
+            setActiveTab('diary');
+            setHomeChip('diary');
+            setCurrentPage('diary');
           }}
           onOpenTodo={() => setCurrentPage('todo')}
           onOpenNewNote={() => {
@@ -608,6 +619,23 @@ export default function App() {
               searchQuery={searchQuery}
               onOpenSearch={() => setIsSearchDrawerOpen(true)}
             />
+          ) : currentPage === 'diary' ? (
+            <DiaryPage
+              theme={theme}
+              notes={notes}
+              onBack={() => {
+                setActiveTab('home');
+                setCurrentPage('main');
+              }}
+              onOpenSearch={() => setIsSearchDrawerOpen(true)}
+              onSelectNote={handleSelectNote}
+              onOpenNewNote={(type, initialDate) => {
+                handleOpenNewNote('diary');
+              }}
+              onUpdateNote={handleUpdateNote}
+              onDeleteNote={handleDeleteNote}
+              onToggleFavorite={handleToggleFavorite}
+            />
           ) : (
             <>
               {/* Top Bar: 'memento' on mobile, Section title + Search on desktop */}
@@ -663,6 +691,10 @@ export default function App() {
             onSelectTab={(tab) => {
               if (tab === 'todo') {
                 setCurrentPage('todo');
+              } else if (tab === 'diary') {
+                setActiveTab('diary');
+                setHomeChip('diary');
+                setCurrentPage('diary');
               } else if (tab === 'vault' || tab === 'safe') {
                 setHomeChip('safe');
                 setActiveTab('safe');
@@ -674,6 +706,11 @@ export default function App() {
                 setActiveTab(tab);
                 setCurrentPage('main');
               }
+            }}
+            onOpenDiary={() => {
+              setActiveTab('diary');
+              setHomeChip('diary');
+              setCurrentPage('diary');
             }}
             onOpenTodo={() => setCurrentPage('todo')}
             onOpenNewNote={handleOpenNewNote}

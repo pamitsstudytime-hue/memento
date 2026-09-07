@@ -84,7 +84,7 @@ function formatFriendlyDate(dateStr: string, todayStr: string): string {
 export function TodoPage({
   theme,
   notes,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   onBack,
   onUpdateNote,
   onAddNote,

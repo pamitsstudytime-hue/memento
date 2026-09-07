@@ -8,14 +8,9 @@
   --safe-top: max(var(--status-bar-inset), var(--android-notch-padding));
 }
 
-html.is-android,
-body.is-android {
-  /* 44px (2.75rem) safe clearance for Android status bar icons and front camera cutout */
-  --android-notch-padding: 2.75rem;
-}
-
 html.is-native-android,
 body.is-native-android {
+  /* 44px (2.75rem) safe clearance only for native Android app where webview extends under system status bar */
   --android-notch-padding: 2.75rem;
 }
 

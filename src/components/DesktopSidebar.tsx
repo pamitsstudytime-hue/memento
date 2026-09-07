@@ -23,6 +23,7 @@ interface DesktopSidebarProps {
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
   onSelectTab: (tab: NavTab) => void;
+  onOpenDiary?: () => void;
   onOpenTodo?: () => void;
   onOpenNewNote: () => void;
   onOpenSearch?: () => void;
@@ -39,6 +40,7 @@ export function DesktopSidebar({
   isCollapsed = false,
   onToggleCollapse,
   onSelectTab,
+  onOpenDiary,
   onOpenTodo,
   onOpenNewNote,
   onOpenSettings,
@@ -92,8 +94,14 @@ export function DesktopSidebar({
       id: 'diary' as NavTab,
       label: 'Diary',
       icon: BookOpen,
-      isActive: currentPage === 'main' && activeTab === 'diary',
-      onClick: () => onSelectTab('diary'),
+      isActive: currentPage === 'diary' || (currentPage === 'main' && activeTab === 'diary'),
+      onClick: () => {
+        if (onOpenDiary) {
+          onOpenDiary();
+        } else {
+          onSelectTab('diary');
+        }
+      },
     },
     {
       id: 'archive' as NavTab,

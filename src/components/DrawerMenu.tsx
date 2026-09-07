@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   Bookmark,
   Settings,
-  BookOpen,
+  ListTodo,
   Archive,
   Moon,
   Sun,
@@ -28,10 +28,10 @@ export function DrawerMenu({
 }: DrawerMenuProps) {
   const isDark = theme === 'dark';
 
-  // Modules available in drawer menu
+  // Modules available in drawer menu (Todo moved here from nav bar)
   const modules = [
     { id: 'favorites', label: 'Favourites', icon: Bookmark },
-    { id: 'diary', label: 'Diary', icon: BookOpen },
+    { id: 'todo', label: 'Todo', icon: ListTodo },
     { id: 'archive', label: 'Archive', icon: Archive },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];

@@ -21,7 +21,7 @@ export function AppearanceDrawer({
   onToggleTheme,
   isNavbarFloating,
   onToggleNavbarFloating,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   onToggleAutoOpenKeyboard,
 }: AppearanceDrawerProps) {
   const isDark = theme === 'dark';

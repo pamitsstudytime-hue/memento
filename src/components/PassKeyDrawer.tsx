@@ -659,9 +659,9 @@ export function PassKeyDrawer({
                     </div>
                     {note.tags && note.tags.length > 0 && (
                       <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                        {note.tags.map((tag) => (
+                        {note.tags.map((tag, tIdx) => (
                           <span
-                            key={tag}
+                            key={`passkey-tag-${tag}-${tIdx}`}
                             className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                               isDark
                                 ? 'bg-amber-500/15 text-amber-300'

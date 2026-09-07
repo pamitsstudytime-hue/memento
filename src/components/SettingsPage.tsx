@@ -42,7 +42,7 @@ export function SettingsPage({
   theme,
   notes,
   isNavbarFloating = false,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   onBack,
   onOpenSearch,
   onSelectNote,

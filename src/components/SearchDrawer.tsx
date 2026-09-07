@@ -52,7 +52,7 @@ export function SearchDrawer({
   isOpen,
   theme,
   notes,
-  autoOpenKeyboard = true,
+  autoOpenKeyboard = false,
   defaultCategory = 'all',
   onClose,
   onSelectNote,

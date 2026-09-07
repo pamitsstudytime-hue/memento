@@ -168,9 +168,8 @@ export const CHIPS: Array<{
 }> = [
   { id: 'all', label: 'All', icon: Layers },
   { id: 'note', label: 'Note', icon: Feather },
-  { id: 'safe', label: 'Safe', icon: Shield },
-  { id: 'key', label: 'Key', icon: KeyRound },
   { id: 'todo', label: 'Todo', icon: ListTodo },
+  { id: 'safe', label: 'Safe', icon: Shield },
   { id: 'diary', label: 'Diary', icon: BookOpen },
 ];
 
@@ -1322,9 +1321,9 @@ function estimateNoteHeight(note: NoteItem): number {
         >
           {columnNotes.map((col, colIndex) => (
             <div key={`col-${colIndex}`} className="flex flex-col gap-3 md:gap-3.5 min-w-0">
-              {col.map((note) => (
+              {col.map((note, noteIdx) => (
                 <NoteCard
-                  key={`card-${note.id}`}
+                  key={`card-${note.id || 'note'}-${noteIdx}`}
                   note={note}
                   theme={theme}
                   onSelectNote={onSelectNote}
